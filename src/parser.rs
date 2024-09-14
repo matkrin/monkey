@@ -44,7 +44,8 @@ impl<'a> Parser<'a> {
 
     fn parse_statement(&mut self) -> Result<Statement> {
         match &self.current_token {
-            Token::Let => return self.parse_let_statement(),
+            Token::Let => self.parse_let_statement(),
+            Token::Return => self.parse_return_statement(),
             t => miette::bail!("Cannot parse token of type {} yet", t),
         }
     }
@@ -65,10 +66,23 @@ impl<'a> Parser<'a> {
         while self.current_token != Token::Semicolon {
             self.next_token()
         }
+
         Ok(Statement::Let {
             token: current_token,
             name,
         })
+    }
+
+    fn parse_return_statement(&mut self) -> Result<Statement> {
+        let current_token = self.current_token.clone();
+        self.next_token();
+
+        // skip until semicolon for now
+        while self.current_token != Token::Semicolon {
+            self.next_token()
+        }
+
+        Ok(Statement::Return { token: current_token, value: todo!() })
     }
 }
 
@@ -87,5 +101,23 @@ let foobar = 838383;
 
         assert_eq!(program.len(), 3);
         assert_eq!(program[0], Statement::Let { token: Token::Let, name: "x".into() });
+        assert_eq!(program[1], Statement::Let { token: Token::Let, name: "y".into() });
+        assert_eq!(program[2], Statement::Let { token: Token::Let, name: "foobar".into() });
+    }
+
+    #[test]
+    fn test_return_statement() {
+        let input = "return 5;
+return 10;
+return 993322;
+";
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        assert_eq!(program.len(), 3);
+        assert_eq!(program[0], Statement::Return { token: Token::Return, value: todo!() });
+        assert_eq!(program[0], Statement::Return { token: Token::Return, value: todo!() });
+        assert_eq!(program[0], Statement::Return { token: Token::Return, value: todo!() });
     }
 }

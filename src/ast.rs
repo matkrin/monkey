@@ -30,7 +30,7 @@ impl ops::Index<usize> for Program {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Statement {
     Let { token: Token, name: String },
-    Return,
+    Return{ token: Token, value: Expression },
     Expr(Expression),
 }
 
