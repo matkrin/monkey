@@ -1,4 +1,5 @@
-use std::ops;
+use fmt::Write;
+use std::{fmt, ops};
 
 use crate::token::Token;
 
@@ -27,14 +28,53 @@ impl ops::Index<usize> for Program {
     }
 }
 
+impl fmt::Display for Program {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut out = String::new();
+        for stmt in &self.0 {
+            writeln!(out, "{}", stmt).expect("Failed write statement to out string");
+        }
+        write!(f, "{}", out)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Statement {
-    Let { token: Token, name: String },
-    Return{ token: Token, value: Expression },
+    Let {
+        token: Token,
+        name: String,
+        value: Expression,
+    },
+    Return {
+        token: Token,
+        value: Expression,
+    },
     Expr(Expression),
+}
+
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Let { token, name, value } => write!(f, "{} {} = {};", token, name, value),
+            Self::Return { token, value } => write!(f, "{} {};", token, value),
+            Self::Expr(_) => todo!(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expression {
     Ident(String),
+    IntegerLiteral(isize),
+    Prefix{token: Token, operator: String, right: Box<Expression>},
+}
+
+impl fmt::Display for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expression::Ident(value) => write!(f, "{}", value),
+            Expression::IntegerLiteral(value) => write!(f, "{}", value),
+            Expression::Prefix { token: _, operator, right } => write!(f, "({}{})", operator, right),
+        }
+    }
 }
