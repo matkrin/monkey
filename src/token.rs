@@ -1,6 +1,6 @@
 use core::fmt;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Illegal,
     Eof,
@@ -62,7 +62,7 @@ impl fmt::Display for Token {
             Token::Ident(x) => write!(f, "Ident: {}", x),
             Token::Int(x) => write!(f, "Int {}", x),
             Token::Assign => write!(f, "="),
-            Token::Plus => write!(f, "+", ),
+            Token::Plus => write!(f, "+",),
             Token::Minus => write!(f, "-"),
             Token::Bang => write!(f, "!"),
             Token::Asterisk => write!(f, "*"),
