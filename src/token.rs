@@ -7,6 +7,15 @@ pub enum Token {
     Int(String),
     Assign,
     Plus,
+    Minus,
+    Bang,
+    Asterisk,
+    Slash,
+
+    LessThan,
+    GreaterThan,
+    Equal,
+    NotEqual,
 
     Comma,
     Semicolon,
@@ -17,6 +26,11 @@ pub enum Token {
 
     Function,
     Let,
+    True,
+    False,
+    If,
+    Else,
+    Return,
 }
 
 impl Token {
@@ -25,6 +39,11 @@ impl Token {
             match ident.as_str() {
                 "fn" => Token::Function,
                 "let" => Token::Let,
+                "true" => Token::True,
+                "false" => Token::False,
+                "if" => Token::If,
+                "else" => Token::Else,
+                "return" => Token::Return,
                 _ => self,
             }
         } else {
