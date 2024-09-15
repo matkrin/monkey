@@ -151,6 +151,7 @@ impl<'a> Parser<'a> {
             }
             Token::True => Expression::Boolean (true),
             Token::False => Expression::Boolean(false),
+            Token::LParen => self.parse_grouped_expression()?,
             // Prefix operators
             Token::Minus | Token::Bang => self.parse_prefix_expression()?,
             _ => miette::bail!("Cannot parse expression yet"),
@@ -208,6 +209,20 @@ impl<'a> Parser<'a> {
             left: Box::new(left),
             right: Box::new(right),
         })
+    }
+
+    fn parse_grouped_expression(&mut self) -> Result<Expression> {
+        self.next_token();
+
+        let expression = self.parse_expression(Precedence::Lowest);
+
+        if self.peek_token != Token::RParen {
+            miette::bail!("Expected Token::RParen");
+        }
+
+        self.next_token();
+
+        expression
     }
 }
 
@@ -505,6 +520,12 @@ return 993322;
         assert_eq!(program_from_input("false").to_string(), "false");
         assert_eq!(program_from_input("3 > 5 == false").to_string(), "((3 > 5) == false)");
         assert_eq!(program_from_input("3 < 5 == true").to_string(), "((3 < 5) == true)");
+
+        assert_eq!(program_from_input("1 + (2 + 3) + 4").to_string(), "((1 + (2 + 3)) + 4)");
+        assert_eq!(program_from_input("(5 + 5) * 2").to_string(), "((5 + 5) * 2)");
+        assert_eq!(program_from_input("2 / (5 + 5)").to_string(), "(2 / (5 + 5))");
+        assert_eq!(program_from_input("-(5 + 5)").to_string(), "(-(5 + 5))");
+        assert_eq!(program_from_input("!(true == true)").to_string(), "(!(true == true))");
     }
 
     #[test]
