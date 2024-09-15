@@ -102,6 +102,10 @@ pub enum Expression {
         parameters: Vec<Identifier>,
         body: BlockStatement,
     },
+    Call {
+        function: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
 }
 
 impl fmt::Display for Expression {
@@ -138,6 +142,16 @@ impl fmt::Display for Expression {
                     params.push(param.to_string())
                 }
                 write!(f, "({}){}", params.join(", "), body)
+            }
+            Expression::Call {
+                function,
+                arguments,
+            } => {
+                let mut args = Vec::new();
+                for arg in arguments {
+                    args.push(arg.to_string())
+                }
+                write!(f, "{}({})", function, args.join(", "))
             }
         }
     }

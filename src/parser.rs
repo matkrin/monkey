@@ -29,6 +29,7 @@ impl From<&Token> for Precedence {
             Token::Minus => Self::Sum,
             Token::Slash => Self::Product,
             Token::Asterisk => Self::Product,
+            Token::LParen => Self::Call,
             _ => Self::Lowest,
         }
     }
@@ -145,6 +146,7 @@ impl<'a> Parser<'a> {
 
     fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression> {
         let mut left_exp = match &self.current_token {
+            // Prefix operators
             Token::Ident(ident) => Expression::Ident(Identifier::new(ident.clone())),
             Token::Int(i) => {
                 Expression::IntegerLiteral(i.parse().expect("Failed parsing Token::Int(i)"))
@@ -154,7 +156,6 @@ impl<'a> Parser<'a> {
             Token::LParen => self.parse_grouped_expression()?,
             Token::If => self.parse_if_expression()?,
             Token::Function => self.parse_function_literal()?,
-            // Prefix operators
             Token::Minus | Token::Bang => self.parse_prefix_expression()?,
             _ => miette::bail!("Cannot parse expression yet"),
         };
@@ -172,6 +173,11 @@ impl<'a> Parser<'a> {
                 | Token::LessThan
                 | Token::GreaterThan => {
                     if let Ok(expr) = self.parse_infix_expression(left_exp.clone()) {
+                        left_exp = expr;
+                    }
+                }
+                Token::LParen => {
+                    if let Ok(expr) = self.parse_call_expression(left_exp.clone()) {
                         left_exp = expr;
                     }
                 }
@@ -322,6 +328,42 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         Ok(identifiers)
+    }
+
+    fn parse_call_expression(&mut self, function: Expression) -> Result<Expression> {
+        let arguments = self.parse_call_arguments()?;
+        Ok(Expression::Call {
+            function: Box::new(function),
+            arguments,
+        })
+    }
+
+    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>> {
+        let mut args = Vec::new();
+        if self.peek_token == Token::RParen {
+            self.next_token();
+            return Ok(args);
+        }
+        self.next_token();
+
+        if let Ok(expr) = self.parse_expression(Precedence::Lowest) {
+            args.push(expr)
+        }
+
+        while self.peek_token == Token::Comma {
+            self.next_token();
+            self.next_token();
+            if let Ok(expr) = self.parse_expression(Precedence::Lowest) {
+                args.push(expr)
+            }
+        }
+
+        if self.peek_token != Token::RParen {
+            miette::bail!("Expected RParen");
+        }
+        self.next_token();
+
+        Ok(args)
     }
 }
 
@@ -643,6 +685,15 @@ return 993322;
             program_from_input("!(true == true)").to_string(),
             "(!(true == true))"
         );
+
+        assert_eq!(
+            program_from_input("a + add(b * c) + d").to_string(),
+            "((a + add((b * c))) + d)"
+        );
+        assert_eq!(
+            program_from_input("add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))").to_string(),
+            "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))"
+        );
     }
 
     #[test]
@@ -764,6 +815,33 @@ return 993322;
                     Identifier::new("z".into())
                 ],
                 body: BlockStatement::new(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_call_expression_parsing() {
+        let program = program_from_input("add(1, 2 * 3, 4 + 5)");
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::Call {
+                function: Box::new(Expression::Ident(Identifier::new("add".to_string()))),
+                arguments: vec![
+                    Expression::IntegerLiteral(1),
+                    Expression::Infix {
+                        token: Token::Asterisk,
+                        operator: "*".to_string(),
+                        left: Box::new(Expression::IntegerLiteral(2)),
+                        right: Box::new(Expression::IntegerLiteral(3)),
+                    },
+                    Expression::Infix {
+                        token: Token::Plus,
+                        operator: "+".to_string(),
+                        left: Box::new(Expression::IntegerLiteral(4)),
+                        right: Box::new(Expression::IntegerLiteral(5)),
+                    },
+                ]
             })
         );
     }
