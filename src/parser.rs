@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::{
-    ast::{Expression, Program, Statement},
+    ast::{BlockStatement, Expression, Program, Statement},
     lexer::Lexer,
     token::Token,
 };
@@ -149,9 +149,10 @@ impl<'a> Parser<'a> {
             Token::Int(i) => {
                 Expression::IntegerLiteral(i.parse().expect("Failed parsing Token::Int(i)"))
             }
-            Token::True => Expression::Boolean (true),
+            Token::True => Expression::Boolean(true),
             Token::False => Expression::Boolean(false),
             Token::LParen => self.parse_grouped_expression()?,
+            Token::If => self.parse_if_expression()?,
             // Prefix operators
             Token::Minus | Token::Bang => self.parse_prefix_expression()?,
             _ => miette::bail!("Cannot parse expression yet"),
@@ -223,6 +224,59 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         expression
+    }
+
+    fn parse_if_expression(&mut self) -> Result<Expression> {
+        //let token = self.current_token.clone();
+        if self.peek_token != Token::LParen {
+            miette::bail!("Expected Left Parenthesis before condition");
+        }
+        self.next_token(); // jump over LParen
+        self.next_token();
+
+        let condition = self.parse_expression(Precedence::Lowest)?;
+        if self.peek_token != Token::RParen {
+            miette::bail!("Expected Right Parenthesis after condition");
+        }
+        self.next_token(); // jump over RParen
+
+        if self.peek_token != Token::LBrace {
+            miette::bail!("Expected Left Brace at beginning of block");
+        }
+        self.next_token(); // jump over LBrace
+
+        let consequence = self.parse_block_statement()?;
+
+        let alternative = if self.peek_token == Token::Else {
+            self.next_token(); // jump over the else
+            if self.peek_token != Token::LBrace {
+                miette::bail!("Expected Left Brace after `else`")
+            }
+            self.next_token(); // jump over LBrace
+            self.parse_block_statement().ok()
+        } else {
+            None
+        };
+
+        Ok(Expression::If {
+            condition: Box::new(condition),
+            consequence,
+            alternative,
+        })
+    }
+
+    fn parse_block_statement(&mut self) -> Result<BlockStatement> {
+        let mut block_statement = BlockStatement::new();
+        self.next_token();
+
+        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+            if let Ok(stmt) = self.parse_statement() {
+                block_statement.push(stmt);
+            };
+            self.next_token();
+        }
+
+        Ok(block_statement)
     }
 }
 
@@ -518,14 +572,32 @@ return 993322;
 
         assert_eq!(program_from_input("true").to_string(), "true");
         assert_eq!(program_from_input("false").to_string(), "false");
-        assert_eq!(program_from_input("3 > 5 == false").to_string(), "((3 > 5) == false)");
-        assert_eq!(program_from_input("3 < 5 == true").to_string(), "((3 < 5) == true)");
+        assert_eq!(
+            program_from_input("3 > 5 == false").to_string(),
+            "((3 > 5) == false)"
+        );
+        assert_eq!(
+            program_from_input("3 < 5 == true").to_string(),
+            "((3 < 5) == true)"
+        );
 
-        assert_eq!(program_from_input("1 + (2 + 3) + 4").to_string(), "((1 + (2 + 3)) + 4)");
-        assert_eq!(program_from_input("(5 + 5) * 2").to_string(), "((5 + 5) * 2)");
-        assert_eq!(program_from_input("2 / (5 + 5)").to_string(), "(2 / (5 + 5))");
+        assert_eq!(
+            program_from_input("1 + (2 + 3) + 4").to_string(),
+            "((1 + (2 + 3)) + 4)"
+        );
+        assert_eq!(
+            program_from_input("(5 + 5) * 2").to_string(),
+            "((5 + 5) * 2)"
+        );
+        assert_eq!(
+            program_from_input("2 / (5 + 5)").to_string(),
+            "(2 / (5 + 5))"
+        );
         assert_eq!(program_from_input("-(5 + 5)").to_string(), "(-(5 + 5))");
-        assert_eq!(program_from_input("!(true == true)").to_string(), "(!(true == true))");
+        assert_eq!(
+            program_from_input("!(true == true)").to_string(),
+            "(!(true == true))"
+        );
     }
 
     #[test]
@@ -537,5 +609,52 @@ return 993322;
         let program = program_from_input("true;");
         assert_eq!(program.len(), 1);
         assert_eq!(program[0], Statement::Expr(Expression::Boolean(true)));
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let input = "if (x < y) { x }";
+        let program = program_from_input(input);
+        let mut consequence = BlockStatement::new();
+        consequence.push(Statement::Expr(Expression::Ident("x".into())));
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::If {
+                condition: Box::new(Expression::Infix {
+                    token: Token::LessThan,
+                    operator: "<".into(),
+                    left: Box::new(Expression::Ident("x".into())),
+                    right: Box::new(Expression::Ident("y".into())),
+                }),
+                consequence,
+                alternative: None,
+            })
+        );
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let input = "if (x < y) { x } else { y }";
+        let program = program_from_input(input);
+        let mut consequence = BlockStatement::new();
+        consequence.push(Statement::Expr(Expression::Ident("x".into())));
+        let mut alternative = BlockStatement::new();
+        alternative.push(Statement::Expr(Expression::Ident("y".into())));
+        let alternative = Some(alternative);
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::If {
+                condition: Box::new(Expression::Infix {
+                    token: Token::LessThan,
+                    operator: "<".into(),
+                    left: Box::new(Expression::Ident("x".into())),
+                    right: Box::new(Expression::Ident("y".into())),
+                }),
+                consequence,
+                alternative,
+            })
+        );
     }
 }

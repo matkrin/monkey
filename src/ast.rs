@@ -3,7 +3,7 @@ use std::{fmt, ops};
 
 use crate::token::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program(Vec<Statement>);
 
 impl Program {
@@ -38,7 +38,7 @@ impl fmt::Display for Program {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     Let {
         token: Token,
@@ -62,6 +62,8 @@ impl fmt::Display for Statement {
     }
 }
 
+pub type BlockStatement = Program;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     Ident(String),
@@ -78,6 +80,11 @@ pub enum Expression {
         right: Box<Expression>,
     },
     Boolean(bool),
+    If {
+        condition: Box<Expression>,
+        consequence: BlockStatement,
+        alternative: Option<BlockStatement>,
+    },
 }
 
 impl fmt::Display for Expression {
@@ -97,6 +104,17 @@ impl fmt::Display for Expression {
                 right,
             } => write!(f, "({} {} {})", left, operator, right),
             Expression::Boolean(value) => write!(f, "{}", value),
+            Expression::If {
+                condition,
+                consequence,
+                alternative,
+            } => {
+                let alternative = match alternative {
+                    Some(alt) => format!("else {}", alt),
+                    None => "".into(),
+                };
+                write!(f, "if{} {} {}", condition, consequence, alternative)
+            }
         }
     }
 }
