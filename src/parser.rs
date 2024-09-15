@@ -106,18 +106,21 @@ impl<'a> Parser<'a> {
         };
 
         if self.peek_token != Token::Assign {
-            miette::bail!("Expected ")
+            miette::bail!("Expected Assign");
         }
+        self.next_token();
+        self.next_token();
 
-        // skip until semicolon for now
-        while self.current_token != Token::Semicolon {
-            self.next_token()
+        let value = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token == Token::Semicolon {
+            self.next_token();
         }
 
         Ok(Statement::Let {
             token: current_token,
             name,
-            value: todo!(),
+            value,
         })
     }
 
@@ -125,14 +128,15 @@ impl<'a> Parser<'a> {
         let current_token = self.current_token.clone();
         self.next_token();
 
-        // skip until semicolon for now
-        while self.current_token != Token::Semicolon {
-            self.next_token()
+        let return_value = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token == Token::Semicolon {
+            self.next_token();
         }
 
         Ok(Statement::Return {
             token: current_token,
-            value: todo!(),
+            value: return_value,
         })
     }
 
@@ -379,8 +383,8 @@ mod tests {
     #[test]
     fn test_let_statement() {
         let input = "let x = 5;
-let y = 10;
-let foobar = 838383;
+let y = true;
+let foobar = y;
 ";
         let program = program_from_input(input);
 
@@ -390,7 +394,7 @@ let foobar = 838383;
             Statement::Let {
                 token: Token::Let,
                 name: "x".into(),
-                value: todo!()
+                value: Expression::IntegerLiteral(5),
             }
         );
         assert_eq!(
@@ -398,7 +402,7 @@ let foobar = 838383;
             Statement::Let {
                 token: Token::Let,
                 name: "y".into(),
-                value: todo!()
+                value: Expression::Boolean(true),
             }
         );
         assert_eq!(
@@ -406,7 +410,7 @@ let foobar = 838383;
             Statement::Let {
                 token: Token::Let,
                 name: "foobar".into(),
-                value: todo!()
+                value: Expression::Ident(Identifier::new("y".to_string()))
             }
         );
     }
@@ -424,21 +428,21 @@ return 993322;
             program[0],
             Statement::Return {
                 token: Token::Return,
-                value: todo!()
+                value: Expression::IntegerLiteral(5),
             }
         );
         assert_eq!(
-            program[0],
+            program[1],
             Statement::Return {
                 token: Token::Return,
-                value: todo!()
+                value: Expression::IntegerLiteral(10),
             }
         );
         assert_eq!(
-            program[0],
+            program[2],
             Statement::Return {
                 token: Token::Return,
-                value: todo!()
+                value: Expression::IntegerLiteral(993322),
             }
         );
     }
