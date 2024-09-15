@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::{
-    ast::{BlockStatement, Expression, Program, Statement},
+    ast::{BlockStatement, Expression, Identifier, Program, Statement},
     lexer::Lexer,
     token::Token,
 };
@@ -145,7 +145,7 @@ impl<'a> Parser<'a> {
 
     fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression> {
         let mut left_exp = match &self.current_token {
-            Token::Ident(ident) => Expression::Ident(ident.clone()),
+            Token::Ident(ident) => Expression::Ident(Identifier::new(ident.clone())),
             Token::Int(i) => {
                 Expression::IntegerLiteral(i.parse().expect("Failed parsing Token::Int(i)"))
             }
@@ -153,6 +153,7 @@ impl<'a> Parser<'a> {
             Token::False => Expression::Boolean(false),
             Token::LParen => self.parse_grouped_expression()?,
             Token::If => self.parse_if_expression()?,
+            Token::Function => self.parse_function_literal()?,
             // Prefix operators
             Token::Minus | Token::Bang => self.parse_prefix_expression()?,
             _ => miette::bail!("Cannot parse expression yet"),
@@ -277,6 +278,50 @@ impl<'a> Parser<'a> {
         }
 
         Ok(block_statement)
+    }
+
+    fn parse_function_literal(&mut self) -> Result<Expression> {
+        if self.peek_token != Token::LParen {
+            miette::bail!("Expeced LParen after `fn`");
+        }
+        self.next_token();
+
+        let parameters = self.parse_function_parameters()?;
+
+        if self.peek_token != Token::LBrace {
+            miette::bail!("Expeced LBrace after parameter list");
+        }
+        self.next_token();
+
+        let body = self.parse_block_statement()?;
+
+        Ok(Expression::FunctionLiteral { parameters, body })
+    }
+
+    fn parse_function_parameters(&mut self) -> Result<Vec<Identifier>> {
+        let mut identifiers = Vec::new();
+
+        if self.peek_token == Token::RParen {
+            self.next_token();
+            return Ok(identifiers);
+        }
+        self.next_token();
+
+        let identifier = Identifier::new(self.current_token.to_string());
+        identifiers.push(identifier);
+
+        while self.peek_token == Token::Comma {
+            self.next_token();
+            self.next_token();
+            identifiers.push(Identifier::new(self.current_token.to_string()));
+        }
+
+        if self.peek_token != Token::RParen {
+            miette::bail!("Expected RParen")
+        }
+        self.next_token();
+
+        Ok(identifiers)
     }
 }
 
@@ -616,7 +661,9 @@ return 993322;
         let input = "if (x < y) { x }";
         let program = program_from_input(input);
         let mut consequence = BlockStatement::new();
-        consequence.push(Statement::Expr(Expression::Ident("x".into())));
+        consequence.push(Statement::Expr(Expression::Ident(Identifier::new(
+            "x".into(),
+        ))));
         assert_eq!(program.len(), 1);
         assert_eq!(
             program[0],
@@ -624,8 +671,8 @@ return 993322;
                 condition: Box::new(Expression::Infix {
                     token: Token::LessThan,
                     operator: "<".into(),
-                    left: Box::new(Expression::Ident("x".into())),
-                    right: Box::new(Expression::Ident("y".into())),
+                    left: Box::new(Expression::Ident(Identifier::new("x".into()))),
+                    right: Box::new(Expression::Ident(Identifier::new("y".into()))),
                 }),
                 consequence,
                 alternative: None,
@@ -638,9 +685,13 @@ return 993322;
         let input = "if (x < y) { x } else { y }";
         let program = program_from_input(input);
         let mut consequence = BlockStatement::new();
-        consequence.push(Statement::Expr(Expression::Ident("x".into())));
+        consequence.push(Statement::Expr(Expression::Ident(Identifier::new(
+            "x".into(),
+        ))));
         let mut alternative = BlockStatement::new();
-        alternative.push(Statement::Expr(Expression::Ident("y".into())));
+        alternative.push(Statement::Expr(Expression::Ident(Identifier::new(
+            "y".into(),
+        ))));
         let alternative = Some(alternative);
         assert_eq!(program.len(), 1);
         assert_eq!(
@@ -649,11 +700,70 @@ return 993322;
                 condition: Box::new(Expression::Infix {
                     token: Token::LessThan,
                     operator: "<".into(),
-                    left: Box::new(Expression::Ident("x".into())),
-                    right: Box::new(Expression::Ident("y".into())),
+                    left: Box::new(Expression::Ident(Identifier::new("x".into()))),
+                    right: Box::new(Expression::Ident(Identifier::new("y".into()))),
                 }),
                 consequence,
                 alternative,
+            })
+        );
+    }
+
+    #[test]
+    fn test_function_literal() {
+        let input = "fn(x, y) { x + y; }";
+        let program = program_from_input(input);
+        let mut body = BlockStatement::new();
+        body.push(Statement::Expr(Expression::Infix {
+            token: Token::Plus,
+            operator: "+".into(),
+            left: Box::new(Expression::Ident(Identifier::new("x".into()))),
+            right: Box::new(Expression::Ident(Identifier::new("y".into()))),
+        }));
+
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::FunctionLiteral {
+                parameters: vec![Identifier::new("x".into()), Identifier::new("y".into())],
+                body,
+            })
+        )
+    }
+
+    #[test]
+    fn test_function_parameter_parsing() {
+        let program = program_from_input("fn() {};");
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::FunctionLiteral {
+                parameters: vec![],
+                body: BlockStatement::new(),
+            })
+        );
+
+        let program = program_from_input("fn(x) {};");
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::FunctionLiteral {
+                parameters: vec![Identifier::new("x".into())],
+                body: BlockStatement::new(),
+            })
+        );
+
+        let program = program_from_input("fn(x, y, z) {};");
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::FunctionLiteral {
+                parameters: vec![
+                    Identifier::new("x".into()),
+                    Identifier::new("y".into()),
+                    Identifier::new("z".into())
+                ],
+                body: BlockStatement::new(),
             })
         );
     }

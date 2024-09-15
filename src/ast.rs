@@ -65,8 +65,21 @@ impl fmt::Display for Statement {
 pub type BlockStatement = Program;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Identifier(String);
+impl Identifier {
+    pub fn new(identifier: String) -> Self {
+        Self(identifier)
+    }
+}
+impl fmt::Display for Identifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
-    Ident(String),
+    Ident(Identifier),
     IntegerLiteral(isize),
     Prefix {
         token: Token,
@@ -85,12 +98,16 @@ pub enum Expression {
         consequence: BlockStatement,
         alternative: Option<BlockStatement>,
     },
+    FunctionLiteral {
+        parameters: Vec<Identifier>,
+        body: BlockStatement,
+    },
 }
 
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expression::Ident(value) => write!(f, "{}", value),
+            Expression::Ident(Identifier(value)) => write!(f, "{}", value),
             Expression::IntegerLiteral(value) => write!(f, "{}", value),
             Expression::Prefix {
                 token: _,
@@ -114,6 +131,13 @@ impl fmt::Display for Expression {
                     None => "".into(),
                 };
                 write!(f, "if{} {} {}", condition, consequence, alternative)
+            }
+            Expression::FunctionLiteral { parameters, body } => {
+                let mut params = Vec::new();
+                for param in parameters {
+                    params.push(param.to_string())
+                }
+                write!(f, "({}){}", params.join(", "), body)
             }
         }
     }
