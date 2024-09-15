@@ -77,6 +77,7 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
     },
+    Boolean(bool),
 }
 
 impl fmt::Display for Expression {
@@ -95,6 +96,7 @@ impl fmt::Display for Expression {
                 left,
                 right,
             } => write!(f, "({} {} {})", left, operator, right),
+            Expression::Boolean(value) => write!(f, "{}", value),
         }
     }
 }

@@ -149,6 +149,9 @@ impl<'a> Parser<'a> {
             Token::Int(i) => {
                 Expression::IntegerLiteral(i.parse().expect("Failed parsing Token::Int(i)"))
             }
+            Token::True => Expression::Boolean (true),
+            Token::False => Expression::Boolean(false),
+            // Prefix operators
             Token::Minus | Token::Bang => self.parse_prefix_expression()?,
             _ => miette::bail!("Cannot parse expression yet"),
         };
@@ -156,6 +159,7 @@ impl<'a> Parser<'a> {
         while self.peek_token != Token::Semicolon && precedence < self.peek_precedence() {
             self.next_token();
             match &self.current_token {
+                // Infix operators
                 Token::Plus
                 | Token::Minus
                 | Token::Slash
@@ -170,7 +174,6 @@ impl<'a> Parser<'a> {
                 }
                 _ => return Ok(left_exp),
             };
-            //self.next_token();
         }
         Ok(left_exp)
     }
@@ -320,6 +323,17 @@ return 993322;
                 right: Box::new(Expression::IntegerLiteral(5)),
             })
         );
+
+        let program = program_from_input("!true;");
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::Prefix {
+                token: Token::Bang,
+                operator: "!".into(),
+                right: Box::new(Expression::Boolean(true)),
+            })
+        );
     }
 
     #[test]
@@ -426,6 +440,30 @@ return 993322;
                 right: five.clone(),
             })
         );
+
+        let program = program_from_input("true == true");
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::Infix {
+                token: Token::Equal,
+                operator: "==".into(),
+                left: Box::new(Expression::Boolean(true)),
+                right: Box::new(Expression::Boolean(true)),
+            })
+        );
+
+        let program = program_from_input("true != false");
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::Infix {
+                token: Token::NotEqual,
+                operator: "!=".into(),
+                left: Box::new(Expression::Boolean(true)),
+                right: Box::new(Expression::Boolean(false)),
+            })
+        );
     }
 
     #[test]
@@ -462,5 +500,21 @@ return 993322;
             program_from_input("3 + 4 * 5 == 3 * 1 + 4 * 5").to_string(),
             "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"
         );
+
+        assert_eq!(program_from_input("true").to_string(), "true");
+        assert_eq!(program_from_input("false").to_string(), "false");
+        assert_eq!(program_from_input("3 > 5 == false").to_string(), "((3 > 5) == false)");
+        assert_eq!(program_from_input("3 < 5 == true").to_string(), "((3 < 5) == true)");
+    }
+
+    #[test]
+    fn test_parsing_boolean() {
+        let program = program_from_input("false;");
+        assert_eq!(program.len(), 1);
+        assert_eq!(program[0], Statement::Expr(Expression::Boolean(false)));
+
+        let program = program_from_input("true;");
+        assert_eq!(program.len(), 1);
+        assert_eq!(program[0], Statement::Expr(Expression::Boolean(true)));
     }
 }
