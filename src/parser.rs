@@ -42,7 +42,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn new(mut lexer: Lexer<'a>) -> Self {
+    pub fn new(mut lexer: Lexer<'a>) -> Self {
         let current_token = lexer.next_token();
         let peek_token = lexer.next_token();
 
@@ -75,7 +75,7 @@ impl<'a> Parser<'a> {
     //    }
     //}
 
-    fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self) -> Program {
         let mut program = Program::new();
 
         while self.current_token != Token::Eof {
