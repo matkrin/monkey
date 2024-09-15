@@ -32,7 +32,7 @@ impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut out = String::new();
         for stmt in &self.0 {
-            writeln!(out, "{}", stmt).expect("Failed write statement to out string");
+            out.push_str(&stmt.to_string())
         }
         write!(f, "{}", out)
     }
@@ -57,16 +57,26 @@ impl fmt::Display for Statement {
         match self {
             Self::Let { token, name, value } => write!(f, "{} {} = {};", token, name, value),
             Self::Return { token, value } => write!(f, "{} {};", token, value),
-            Self::Expr(_) => todo!(),
+            Self::Expr(expr) => write!(f, "{}", expr),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     Ident(String),
     IntegerLiteral(isize),
-    Prefix{token: Token, operator: String, right: Box<Expression>},
+    Prefix {
+        token: Token,
+        operator: String,
+        right: Box<Expression>,
+    },
+    Infix {
+        token: Token,
+        operator: String,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
 }
 
 impl fmt::Display for Expression {
@@ -74,7 +84,17 @@ impl fmt::Display for Expression {
         match self {
             Expression::Ident(value) => write!(f, "{}", value),
             Expression::IntegerLiteral(value) => write!(f, "{}", value),
-            Expression::Prefix { token: _, operator, right } => write!(f, "({}{})", operator, right),
+            Expression::Prefix {
+                token: _,
+                operator,
+                right,
+            } => write!(f, "({}{})", operator, right),
+            Expression::Infix {
+                token: _,
+                operator,
+                left,
+                right,
+            } => write!(f, "({} {} {})", left, operator, right),
         }
     }
 }
