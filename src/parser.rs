@@ -81,7 +81,10 @@ impl<'a> Parser<'a> {
         while self.current_token != Token::Eof {
             match self.parse_statement() {
                 Ok(stmt) => program.push(stmt),
-                Err(e) => {}
+                Err(e) => {
+                    println!("{:?}", e);
+                    continue;
+                }
             }
             self.next_token();
         }
@@ -106,7 +109,16 @@ impl<'a> Parser<'a> {
         };
 
         if self.peek_token != Token::Assign {
-            miette::bail!("Expected Assign");
+            //miette::bail!("Expected Assign");
+            return Err(miette::miette!(
+                severity = miette::Severity::Error,
+                code = "expected::rparen",
+                help = "always close your parens",
+                labels = vec![miette::LabeledSpan::at(0..5, "here")],
+                //url = "https://example.com",
+                help = "Use `=` after the identifier",
+                "Expected Assign!!!"
+            ).with_source_code(self.lexer.source_code().to_string()));
         }
         self.next_token();
         self.next_token();
