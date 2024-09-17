@@ -3,7 +3,7 @@
 use crate::{
     ast::{BlockStatement, Expression, Identifier, Program, Statement},
     lexer::Lexer,
-    token::{Token, TokenKind},
+    token::{Span, Token, TokenKind},
 };
 use miette::Result;
 
@@ -83,7 +83,7 @@ impl<'a> Parser<'a> {
                 Ok(stmt) => program.push(stmt),
                 Err(e) => {
                     println!("{:?}", e);
-                    continue;
+                    break;
                 }
             }
             self.next_token();
@@ -110,14 +110,13 @@ impl<'a> Parser<'a> {
 
         if self.peek_token.kind != TokenKind::Assign {
             //miette::bail!("Expected Assign");
+            let Span { start, end } = self.peek_token.span;
             return Err(miette::miette!(
                 severity = miette::Severity::Error,
-                code = "expected::rparen",
-                help = "always close your parens",
-                labels = vec![miette::LabeledSpan::at(0..3, "here")],
+                labels = vec![miette::LabeledSpan::at(start..end, "here")],
                 //url = "https://example.com",
                 help = "Use `=` after the identifier",
-                "Expected Assign!!!"
+                "Expected Assignment"
             )
             .with_source_code(self.lexer.source_code().to_string()));
         }
@@ -242,7 +241,15 @@ impl<'a> Parser<'a> {
         let expression = self.parse_expression(Precedence::Lowest);
 
         if self.peek_token.kind != TokenKind::RParen {
-            miette::bail!("Expected Token::RParen");
+            let Span { start, end } = self.peek_token.span;
+            return Err(miette::miette!(
+                severity = miette::Severity::Error,
+                labels = vec![miette::LabeledSpan::at(start..end, "here")],
+                //url = "https://example.com",
+                help = "Use `)` to end the grouping",
+                "Expected `)`"
+            )
+            .with_source_code(self.lexer.source_code().to_string()));
         }
 
         self.next_token();
@@ -253,14 +260,30 @@ impl<'a> Parser<'a> {
     fn parse_if_expression(&mut self) -> Result<Expression> {
         //let token = self.current_token.clone();
         if self.peek_token.kind != TokenKind::LParen {
-            miette::bail!("Expected Left Parenthesis before condition");
+            let Span { start, end } = self.peek_token.span;
+            return Err(miette::miette!(
+                severity = miette::Severity::Error,
+                labels = vec![miette::LabeledSpan::at(start..end, "here")],
+                //url = "https://example.com",
+                help = "Use parentheses around condition",
+                "Expected `(`"
+            )
+            .with_source_code(self.lexer.source_code().to_string()));
         }
         self.next_token(); // jump over LParen
         self.next_token();
 
         let condition = self.parse_expression(Precedence::Lowest)?;
         if self.peek_token.kind != TokenKind::RParen {
-            miette::bail!("Expected Right Parenthesis after condition");
+            let Span { start, end } = self.peek_token.span;
+            return Err(miette::miette!(
+                severity = miette::Severity::Error,
+                labels = vec![miette::LabeledSpan::at(start..end, "here")],
+                //url = "https://example.com",
+                help = "Use parentheses around condition",
+                "Expected `)`"
+            )
+            .with_source_code(self.lexer.source_code().to_string()));
         }
         self.next_token(); // jump over RParen
 
