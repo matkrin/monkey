@@ -3,7 +3,7 @@
 use crate::{
     ast::{BlockStatement, Expression, Identifier, Program, Statement},
     lexer::Lexer,
-    token::Token,
+    token::{Token, TokenKind},
 };
 use miette::Result;
 
@@ -20,16 +20,16 @@ enum Precedence {
 
 impl From<&Token> for Precedence {
     fn from(value: &Token) -> Self {
-        match value {
-            Token::Equal => Self::Equals,
-            Token::NotEqual => Self::Equals,
-            Token::LessThan => Self::LessGreater,
-            Token::GreaterThan => Self::LessGreater,
-            Token::Plus => Self::Sum,
-            Token::Minus => Self::Sum,
-            Token::Slash => Self::Product,
-            Token::Asterisk => Self::Product,
-            Token::LParen => Self::Call,
+        match value.kind {
+            TokenKind::Equal => Self::Equals,
+            TokenKind::NotEqual => Self::Equals,
+            TokenKind::LessThan => Self::LessGreater,
+            TokenKind::GreaterThan => Self::LessGreater,
+            TokenKind::Plus => Self::Sum,
+            TokenKind::Minus => Self::Sum,
+            TokenKind::Slash => Self::Product,
+            TokenKind::Asterisk => Self::Product,
+            TokenKind::LParen => Self::Call,
             _ => Self::Lowest,
         }
     }
@@ -78,7 +78,7 @@ impl<'a> Parser<'a> {
     pub fn parse_program(&mut self) -> Program {
         let mut program = Program::new();
 
-        while self.current_token != Token::Eof {
+        while self.current_token.kind != TokenKind::Eof {
             match self.parse_statement() {
                 Ok(stmt) => program.push(stmt),
                 Err(e) => {
@@ -93,9 +93,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> Result<Statement> {
-        match &self.current_token {
-            Token::Let => self.parse_let_statement(),
-            Token::Return => self.parse_return_statement(),
+        match &self.current_token.kind {
+            TokenKind::Let => self.parse_let_statement(),
+            TokenKind::Return => self.parse_return_statement(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -103,29 +103,30 @@ impl<'a> Parser<'a> {
     fn parse_let_statement(&mut self) -> Result<Statement> {
         let current_token = self.current_token.clone();
         self.next_token();
-        let name = match &self.current_token {
-            Token::Ident(ident) => ident.clone(),
+        let name = match &self.current_token.kind {
+            TokenKind::Ident(ident) => ident.clone(),
             t => miette::bail!("Expected Ident, got: {}", t),
         };
 
-        if self.peek_token != Token::Assign {
+        if self.peek_token.kind != TokenKind::Assign {
             //miette::bail!("Expected Assign");
             return Err(miette::miette!(
                 severity = miette::Severity::Error,
                 code = "expected::rparen",
                 help = "always close your parens",
-                labels = vec![miette::LabeledSpan::at(0..5, "here")],
+                labels = vec![miette::LabeledSpan::at(0..3, "here")],
                 //url = "https://example.com",
                 help = "Use `=` after the identifier",
                 "Expected Assign!!!"
-            ).with_source_code(self.lexer.source_code().to_string()));
+            )
+            .with_source_code(self.lexer.source_code().to_string()));
         }
         self.next_token();
         self.next_token();
 
         let value = self.parse_expression(Precedence::Lowest)?;
 
-        if self.peek_token == Token::Semicolon {
+        if self.peek_token.kind == TokenKind::Semicolon {
             self.next_token();
         }
 
@@ -142,7 +143,7 @@ impl<'a> Parser<'a> {
 
         let return_value = self.parse_expression(Precedence::Lowest)?;
 
-        if self.peek_token == Token::Semicolon {
+        if self.peek_token.kind == TokenKind::Semicolon {
             self.next_token();
         }
 
@@ -154,45 +155,45 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> Result<Statement> {
         let expression = self.parse_expression(Precedence::Lowest)?;
-        if self.peek_token == Token::Semicolon {
+        if self.peek_token.kind == TokenKind::Semicolon {
             self.next_token()
         }
         Ok(Statement::Expr(expression))
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression> {
-        let mut left_exp = match &self.current_token {
+        let mut left_exp = match &self.current_token.kind {
             // Prefix operators
-            Token::Ident(ident) => Expression::Ident(Identifier::new(ident.clone())),
-            Token::Int(i) => {
+            TokenKind::Ident(ident) => Expression::Ident(Identifier::new(ident.clone())),
+            TokenKind::Int(i) => {
                 Expression::IntegerLiteral(i.parse().expect("Failed parsing Token::Int(i)"))
             }
-            Token::True => Expression::Boolean(true),
-            Token::False => Expression::Boolean(false),
-            Token::LParen => self.parse_grouped_expression()?,
-            Token::If => self.parse_if_expression()?,
-            Token::Function => self.parse_function_literal()?,
-            Token::Minus | Token::Bang => self.parse_prefix_expression()?,
+            TokenKind::True => Expression::Boolean(true),
+            TokenKind::False => Expression::Boolean(false),
+            TokenKind::LParen => self.parse_grouped_expression()?,
+            TokenKind::If => self.parse_if_expression()?,
+            TokenKind::Function => self.parse_function_literal()?,
+            TokenKind::Minus | TokenKind::Bang => self.parse_prefix_expression()?,
             _ => miette::bail!("Cannot parse expression yet"),
         };
 
-        while self.peek_token != Token::Semicolon && precedence < self.peek_precedence() {
+        while self.peek_token.kind != TokenKind::Semicolon && precedence < self.peek_precedence() {
             self.next_token();
-            match &self.current_token {
+            match &self.current_token.kind {
                 // Infix operators
-                Token::Plus
-                | Token::Minus
-                | Token::Slash
-                | Token::Asterisk
-                | Token::Equal
-                | Token::NotEqual
-                | Token::LessThan
-                | Token::GreaterThan => {
+                TokenKind::Plus
+                | TokenKind::Minus
+                | TokenKind::Slash
+                | TokenKind::Asterisk
+                | TokenKind::Equal
+                | TokenKind::NotEqual
+                | TokenKind::LessThan
+                | TokenKind::GreaterThan => {
                     if let Ok(expr) = self.parse_infix_expression(left_exp.clone()) {
                         left_exp = expr;
                     }
                 }
-                Token::LParen => {
+                TokenKind::LParen => {
                     if let Ok(expr) = self.parse_call_expression(left_exp.clone()) {
                         left_exp = expr;
                     }
@@ -205,7 +206,7 @@ impl<'a> Parser<'a> {
 
     fn parse_prefix_expression(&mut self) -> Result<Expression> {
         let current_token = self.current_token.clone();
-        let operator = current_token.to_string();
+        let operator = current_token.kind.to_string();
 
         self.next_token();
 
@@ -220,7 +221,7 @@ impl<'a> Parser<'a> {
 
     fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression> {
         let current_token = self.current_token.clone();
-        let operator = current_token.to_string();
+        let operator = current_token.kind.to_string();
         let precedence = self.current_precedence();
 
         self.next_token();
@@ -240,7 +241,7 @@ impl<'a> Parser<'a> {
 
         let expression = self.parse_expression(Precedence::Lowest);
 
-        if self.peek_token != Token::RParen {
+        if self.peek_token.kind != TokenKind::RParen {
             miette::bail!("Expected Token::RParen");
         }
 
@@ -251,28 +252,28 @@ impl<'a> Parser<'a> {
 
     fn parse_if_expression(&mut self) -> Result<Expression> {
         //let token = self.current_token.clone();
-        if self.peek_token != Token::LParen {
+        if self.peek_token.kind != TokenKind::LParen {
             miette::bail!("Expected Left Parenthesis before condition");
         }
         self.next_token(); // jump over LParen
         self.next_token();
 
         let condition = self.parse_expression(Precedence::Lowest)?;
-        if self.peek_token != Token::RParen {
+        if self.peek_token.kind != TokenKind::RParen {
             miette::bail!("Expected Right Parenthesis after condition");
         }
         self.next_token(); // jump over RParen
 
-        if self.peek_token != Token::LBrace {
+        if self.peek_token.kind != TokenKind::LBrace {
             miette::bail!("Expected Left Brace at beginning of block");
         }
         self.next_token(); // jump over LBrace
 
         let consequence = self.parse_block_statement()?;
 
-        let alternative = if self.peek_token == Token::Else {
+        let alternative = if self.peek_token.kind == TokenKind::Else {
             self.next_token(); // jump over the else
-            if self.peek_token != Token::LBrace {
+            if self.peek_token.kind != TokenKind::LBrace {
                 miette::bail!("Expected Left Brace after `else`")
             }
             self.next_token(); // jump over LBrace
@@ -292,7 +293,9 @@ impl<'a> Parser<'a> {
         let mut block_statement = BlockStatement::new();
         self.next_token();
 
-        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+        while self.current_token.kind != TokenKind::RBrace
+            && self.current_token.kind != TokenKind::Eof
+        {
             if let Ok(stmt) = self.parse_statement() {
                 block_statement.push(stmt);
             };
@@ -303,14 +306,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_function_literal(&mut self) -> Result<Expression> {
-        if self.peek_token != Token::LParen {
+        if self.peek_token.kind != TokenKind::LParen {
             miette::bail!("Expeced LParen after `fn`");
         }
         self.next_token();
 
         let parameters = self.parse_function_parameters()?;
 
-        if self.peek_token != Token::LBrace {
+        if self.peek_token.kind != TokenKind::LBrace {
             miette::bail!("Expeced LBrace after parameter list");
         }
         self.next_token();
@@ -323,22 +326,22 @@ impl<'a> Parser<'a> {
     fn parse_function_parameters(&mut self) -> Result<Vec<Identifier>> {
         let mut identifiers = Vec::new();
 
-        if self.peek_token == Token::RParen {
+        if self.peek_token.kind == TokenKind::RParen {
             self.next_token();
             return Ok(identifiers);
         }
         self.next_token();
 
-        let identifier = Identifier::new(self.current_token.to_string());
+        let identifier = Identifier::new(self.current_token.kind.to_string());
         identifiers.push(identifier);
 
-        while self.peek_token == Token::Comma {
+        while self.peek_token.kind == TokenKind::Comma {
             self.next_token();
             self.next_token();
-            identifiers.push(Identifier::new(self.current_token.to_string()));
+            identifiers.push(Identifier::new(self.current_token.kind.to_string()));
         }
 
-        if self.peek_token != Token::RParen {
+        if self.peek_token.kind != TokenKind::RParen {
             miette::bail!("Expected RParen")
         }
         self.next_token();
@@ -356,7 +359,7 @@ impl<'a> Parser<'a> {
 
     fn parse_call_arguments(&mut self) -> Result<Vec<Expression>> {
         let mut args = Vec::new();
-        if self.peek_token == Token::RParen {
+        if self.peek_token.kind == TokenKind::RParen {
             self.next_token();
             return Ok(args);
         }
@@ -366,7 +369,7 @@ impl<'a> Parser<'a> {
             args.push(expr)
         }
 
-        while self.peek_token == Token::Comma {
+        while self.peek_token.kind == TokenKind::Comma {
             self.next_token();
             self.next_token();
             if let Ok(expr) = self.parse_expression(Precedence::Lowest) {
@@ -374,7 +377,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if self.peek_token != Token::RParen {
+        if self.peek_token.kind != TokenKind::RParen {
             miette::bail!("Expected RParen");
         }
         self.next_token();
@@ -404,7 +407,7 @@ let foobar = y;
         assert_eq!(
             program[0],
             Statement::Let {
-                token: Token::Let,
+                token: Token::new(TokenKind::Let, 0, 2),
                 name: "x".into(),
                 value: Expression::IntegerLiteral(5),
             }
@@ -412,7 +415,7 @@ let foobar = y;
         assert_eq!(
             program[1],
             Statement::Let {
-                token: Token::Let,
+                token: Token::new(TokenKind::Let, 11, 13),
                 name: "y".into(),
                 value: Expression::Boolean(true),
             }
@@ -420,7 +423,7 @@ let foobar = y;
         assert_eq!(
             program[2],
             Statement::Let {
-                token: Token::Let,
+                token: Token::new(TokenKind::Let, 25, 27),
                 name: "foobar".into(),
                 value: Expression::Ident(Identifier::new("y".to_string()))
             }
@@ -439,21 +442,21 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Return {
-                token: Token::Return,
+                token: Token::new(TokenKind::Return, 0, 5),
                 value: Expression::IntegerLiteral(5),
             }
         );
         assert_eq!(
             program[1],
             Statement::Return {
-                token: Token::Return,
+                token: Token::new(TokenKind::Return, 10, 15),
                 value: Expression::IntegerLiteral(10),
             }
         );
         assert_eq!(
             program[2],
             Statement::Return {
-                token: Token::Return,
+                token: Token::new(TokenKind::Return, 21, 26),
                 value: Expression::IntegerLiteral(993322),
             }
         );
@@ -477,7 +480,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Prefix {
-                token: Token::Bang,
+                token: Token::new(TokenKind::Bang, 0, 0),
                 operator: "!".into(),
                 right: Box::new(Expression::IntegerLiteral(5)),
             })
@@ -490,7 +493,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Prefix {
-                token: Token::Minus,
+                token: Token::new(TokenKind::Minus, 0, 0),
                 operator: "-".into(),
                 right: Box::new(Expression::IntegerLiteral(5)),
             })
@@ -501,7 +504,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Prefix {
-                token: Token::Bang,
+                token: Token::new(TokenKind::Bang, 0, 0),
                 operator: "!".into(),
                 right: Box::new(Expression::Boolean(true)),
             })
@@ -518,7 +521,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::Plus,
+                token: Token::new(TokenKind::Plus, 2, 2),
                 operator: "+".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -532,7 +535,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::Minus,
+                token: Token::new(TokenKind::Minus, 2, 2),
                 operator: "-".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -546,7 +549,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::Asterisk,
+                token: Token::new(TokenKind::Asterisk, 2, 2),
                 operator: "*".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -558,7 +561,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::Slash,
+                token: Token::new(TokenKind::Slash, 2, 2),
                 operator: "/".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -570,7 +573,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::GreaterThan,
+                token: Token::new(TokenKind::GreaterThan, 2, 2),
                 operator: ">".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -582,7 +585,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::LessThan,
+                token: Token::new(TokenKind::LessThan, 2, 2),
                 operator: "<".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -594,7 +597,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::Equal,
+                token: Token::new(TokenKind::Equal, 2, 3),
                 operator: "==".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -606,7 +609,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::NotEqual,
+                token: Token::new(TokenKind::NotEqual, 2, 3),
                 operator: "!=".into(),
                 left: five.clone(),
                 right: five.clone(),
@@ -618,7 +621,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::Equal,
+                token: Token::new(TokenKind::Equal, 5, 6),
                 operator: "==".into(),
                 left: Box::new(Expression::Boolean(true)),
                 right: Box::new(Expression::Boolean(true)),
@@ -630,7 +633,7 @@ return 993322;
         assert_eq!(
             program[0],
             Statement::Expr(Expression::Infix {
-                token: Token::NotEqual,
+                token: Token::new(TokenKind::NotEqual, 5, 6),
                 operator: "!=".into(),
                 left: Box::new(Expression::Boolean(true)),
                 right: Box::new(Expression::Boolean(false)),
@@ -736,7 +739,7 @@ return 993322;
             program[0],
             Statement::Expr(Expression::If {
                 condition: Box::new(Expression::Infix {
-                    token: Token::LessThan,
+                    token: Token::new(TokenKind::LessThan, 6, 6),
                     operator: "<".into(),
                     left: Box::new(Expression::Ident(Identifier::new("x".into()))),
                     right: Box::new(Expression::Ident(Identifier::new("y".into()))),
@@ -765,7 +768,7 @@ return 993322;
             program[0],
             Statement::Expr(Expression::If {
                 condition: Box::new(Expression::Infix {
-                    token: Token::LessThan,
+                    token: Token::new(TokenKind::LessThan, 6, 6),
                     operator: "<".into(),
                     left: Box::new(Expression::Ident(Identifier::new("x".into()))),
                     right: Box::new(Expression::Ident(Identifier::new("y".into()))),
@@ -782,7 +785,7 @@ return 993322;
         let program = program_from_input(input);
         let mut body = BlockStatement::new();
         body.push(Statement::Expr(Expression::Infix {
-            token: Token::Plus,
+            token: Token::new(TokenKind::Plus, 13, 13),
             operator: "+".into(),
             left: Box::new(Expression::Ident(Identifier::new("x".into()))),
             right: Box::new(Expression::Ident(Identifier::new("y".into()))),
@@ -846,13 +849,13 @@ return 993322;
                 arguments: vec![
                     Expression::IntegerLiteral(1),
                     Expression::Infix {
-                        token: Token::Asterisk,
+                        token: Token::new(TokenKind::Asterisk, 9, 9),
                         operator: "*".to_string(),
                         left: Box::new(Expression::IntegerLiteral(2)),
                         right: Box::new(Expression::IntegerLiteral(3)),
                     },
                     Expression::Infix {
-                        token: Token::Plus,
+                        token: Token::new(TokenKind::Plus, 16, 16),
                         operator: "+".to_string(),
                         left: Box::new(Expression::IntegerLiteral(4)),
                         right: Box::new(Expression::IntegerLiteral(5)),

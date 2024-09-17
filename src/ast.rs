@@ -55,8 +55,8 @@ pub enum Statement {
 impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Let { token, name, value } => write!(f, "{} {} = {};", token, name, value),
-            Self::Return { token, value } => write!(f, "{} {};", token, value),
+            Self::Let { token, name, value } => write!(f, "{} {} = {};", token.kind, name, value),
+            Self::Return { token, value } => write!(f, "{} {};", token.kind, value),
             Self::Expr(expr) => write!(f, "{}", expr),
         }
     }
