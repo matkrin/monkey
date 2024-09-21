@@ -8,6 +8,7 @@ mod ast;
 mod lexer;
 mod parser;
 mod token;
+mod object;
 
 const PROMPT: &str = "monkey❯";
 
