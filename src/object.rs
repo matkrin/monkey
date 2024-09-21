@@ -1,7 +1,8 @@
 use core::fmt;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Object {
-    Integer(i64),
+    Integer(isize),
     Boolean(bool),
     Null,
 }

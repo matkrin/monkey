@@ -1,6 +1,8 @@
 use std::io::{self, BufReader, BufRead};
 use std::io::{Read, Write};
 
+use ast::Node;
+use evaluator::eval;
 use lexer::Lexer;
 use parser::Parser;
 
@@ -9,6 +11,7 @@ mod lexer;
 mod parser;
 mod token;
 mod object;
+mod evaluator;
 
 const PROMPT: &str = "monkey❯";
 
@@ -37,7 +40,11 @@ fn start_repl(stdin: impl Read, mut stdout: impl Write) {
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
 
-        writeln!(stdout, "{}", program).expect("Failed writing to stdout");
+        match eval(Node::Program(program)){
+            Ok(evaluated) => writeln!(stdout, "{}", evaluated).expect("Failed writing to stdout"),
+            Err(e) => writeln!(stdout, "{:?}", e).expect("Failed writing to stdout"),
+        };
+
     }
 
 }

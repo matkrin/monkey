@@ -4,6 +4,13 @@ use std::{fmt, ops};
 use crate::token::Token;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Node {
+    Program(Program),
+    Statement(Statement),
+    Expression(Expression),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program(Vec<Statement>);
 
 impl Program {
@@ -17,6 +24,10 @@ impl Program {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn statements(self) -> Vec<Statement> {
+        self.0
     }
 }
 
