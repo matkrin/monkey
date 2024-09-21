@@ -26,8 +26,8 @@ impl Program {
         self.0.len()
     }
 
-    pub fn statements(self) -> Vec<Statement> {
-        self.0
+    pub fn statements(&self) -> &[Statement] {
+        &self.0
     }
 }
 

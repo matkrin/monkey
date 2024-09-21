@@ -7,25 +7,25 @@ use miette::Result;
 
 pub fn eval(node: Node) -> Result<Object> {
     match node {
-        Node::Program(program) => eval_program(program),
-        Node::Statement(stmt) => eval_statement(stmt),
+        Node::Program(program) => eval_program(&program),
+        Node::Statement(stmt) => eval_statement(&stmt),
         Node::Expression(expr) => eval_expression(&expr),
     }
 }
 
-fn eval_program(program: Program) -> Result<Object> {
+fn eval_program(program: &Program) -> Result<Object> {
     let mut result = Object::Null;
     for stmt in program.statements() {
-        result = eval(Node::Statement(stmt))?;
+        result = eval_statement(stmt)?;
     }
     Ok(result)
 }
 
-fn eval_statement(statement: Statement) -> Result<Object> {
+fn eval_statement(statement: &Statement) -> Result<Object> {
     match statement {
         Statement::Let { token, name, value } => todo!(),
         Statement::Return { token, value } => todo!(),
-        Statement::Expr(expr) => eval_expression(&expr),
+        Statement::Expr(expr) => eval_expression(expr),
     }
 }
 
@@ -56,7 +56,16 @@ fn eval_expression(expression: &Expression) -> Result<Object> {
             condition,
             consequence,
             alternative,
-        } => todo!(),
+        } => {
+            match is_truthy(eval_expression(condition)?) {
+                true => eval_program(consequence),
+                false => if let Some(alt) = alternative {
+                    eval_program(alt)
+                } else {
+                    Ok(Object::Null)
+                },
+            }
+        },
         Expression::FunctionLiteral { parameters, body } => todo!(),
         Expression::Call {
             function,
@@ -104,6 +113,14 @@ fn eval_infix_expression(operator: &str, left: &Object, right: &Object) -> Resul
     };
 
     Ok(res)
+}
+
+fn is_truthy(obj: Object) -> bool {
+    match obj {
+        Object::Null => false,
+        Object::Boolean(b) => b,
+        _ => true,
+    }
 }
 
 #[cfg(test)]
@@ -195,5 +212,16 @@ mod tests {
         assert_eq!(test_eval("10").unwrap(), Object::Integer(10));
         assert_eq!(test_eval("-5").unwrap(), Object::Integer(-5));
         assert_eq!(test_eval("-10").unwrap(), Object::Integer(-10));
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        assert_eq!(test_eval("if (true) { 10 }").unwrap(), Object::Integer(10));
+        assert_eq!(test_eval("if (false) { 10 }").unwrap(), Object::Null);
+        assert_eq!(test_eval("if (1) { 10 }").unwrap(), Object::Integer(10));
+        assert_eq!(test_eval("if (1 < 2) { 10 }").unwrap(), Object::Integer(10));
+        assert_eq!(test_eval("if (1 > 2) { 10 }").unwrap(), Object::Null);
+        assert_eq!(test_eval("if (1 > 2) { 10 } else { 20 }").unwrap(), Object::Integer(20));
+        assert_eq!(test_eval("if (1 < 2) { 10 } else { 20 }").unwrap(), Object::Integer(10));
     }
 }
