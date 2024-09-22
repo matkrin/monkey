@@ -5,7 +5,7 @@ use crate::{
     object::Object,
 };
 
-use miette::Result;
+use miette::{Result, Severity};
 
 pub fn eval(node: Node) -> Result<Rc<Object>> {
     match node {
@@ -88,7 +88,7 @@ fn eval_expression(expression: &Expression) -> Result<Rc<Object>> {
 }
 
 fn eval_prefix_expression(operator: &str, right: &Object) -> Result<Rc<Object>> {
-    let res = match operator {
+    match operator {
         "!" => {
             let res = match right {
                 Object::Boolean(true) => false,
@@ -96,36 +96,73 @@ fn eval_prefix_expression(operator: &str, right: &Object) -> Result<Rc<Object>> 
                 Object::Null => true,
                 _ => false,
             };
-            Object::Boolean(res)
+            Ok(Rc::new(Object::Boolean(res)))
         }
         "-" => match right {
-            Object::Integer(i) => Object::Integer(-i),
-            _ => Object::Null,
+            Object::Integer(i) => Ok(Rc::new(Object::Integer(-i))),
+            _ => Err(miette::miette!(
+                severity = Severity::Error,
+                //code = "expected::rparen",
+                //help = "always close your parens",
+                //labels = vec![LabeledSpan::at_offset(6, "here")],
+                //url = "https://example.com",
+                "unknown operator: -{}",
+                right.r#type()
+            )),
         },
-        _ => Object::Null,
-    };
-
-    Ok(Rc::new(res))
+        _ => Err(miette::miette!(
+            severity = Severity::Error,
+            //code = "expected::rparen",
+            //help = "always close your parens",
+            //labels = vec![LabeledSpan::at_offset(6, "here")],
+            //url = "https://example.com",
+            "unknown operator: {}{}",
+            operator,
+            right.r#type()
+        )),
+    }
 }
 
 fn eval_infix_expression(operator: &str, left: &Object, right: &Object) -> Result<Rc<Object>> {
-    let res = match (left, operator, right) {
-        (Object::Integer(l), "+", Object::Integer(r)) => Object::Integer(l + r),
-        (Object::Integer(l), "-", Object::Integer(r)) => Object::Integer(l - r),
-        (Object::Integer(l), "*", Object::Integer(r)) => Object::Integer(l * r),
-        (Object::Integer(l), "/", Object::Integer(r)) => Object::Integer(l / r),
+    if right.r#type() != left.r#type() {
+        return Err(miette::miette!(
+            severity = Severity::Error,
+            //code = "expected::rparen",
+            //help = "always close your parens",
+            //labels = vec![LabeledSpan::at_offset(6, "here")],
+            //url = "https://example.com",
+            "type mismatch: {} {} {}",
+            left.r#type(),
+            operator,
+            right.r#type(),
+        ));
+    }
 
-        (Object::Integer(l), "<", Object::Integer(r)) => Object::Boolean(l < r),
-        (Object::Integer(l), ">", Object::Integer(r)) => Object::Boolean(l > r),
-        (Object::Integer(l), "==", Object::Integer(r)) => Object::Boolean(l == r),
-        (Object::Integer(l), "!=", Object::Integer(r)) => Object::Boolean(l != r),
+    match (left, operator, right) {
+        (Object::Integer(l), "+", Object::Integer(r)) => Ok(Rc::new(Object::Integer(l + r))),
+        (Object::Integer(l), "-", Object::Integer(r)) => Ok(Rc::new(Object::Integer(l - r))),
+        (Object::Integer(l), "*", Object::Integer(r)) => Ok(Rc::new(Object::Integer(l * r))),
+        (Object::Integer(l), "/", Object::Integer(r)) => Ok(Rc::new(Object::Integer(l / r))),
 
-        (Object::Boolean(l), "==", Object::Boolean(r)) => Object::Boolean(l == r),
-        (Object::Boolean(l), "!=", Object::Boolean(r)) => Object::Boolean(l != r),
-        _ => Object::Null,
-    };
+        (Object::Integer(l), "<", Object::Integer(r)) => Ok(Rc::new(Object::Boolean(l < r))),
+        (Object::Integer(l), ">", Object::Integer(r)) => Ok(Rc::new(Object::Boolean(l > r))),
+        (Object::Integer(l), "==", Object::Integer(r)) => Ok(Rc::new(Object::Boolean(l == r))),
+        (Object::Integer(l), "!=", Object::Integer(r)) => Ok(Rc::new(Object::Boolean(l != r))),
 
-    Ok(Rc::new(res))
+        (Object::Boolean(l), "==", Object::Boolean(r)) => Ok(Rc::new(Object::Boolean(l == r))),
+        (Object::Boolean(l), "!=", Object::Boolean(r)) => Ok(Rc::new(Object::Boolean(l != r))),
+        _ => Err(miette::miette!(
+            severity = Severity::Error,
+            //code = "expected::rparen",
+            //help = "always close your parens",
+            //labels = vec![LabeledSpan::at_offset(6, "here")],
+            //url = "https://example.com",
+            "unknown operator: {} {} {}",
+            left.r#type(),
+            operator,
+            right.r#type(),
+        )),
+    }
 }
 
 fn is_truthy(obj: &Object) -> bool {
@@ -332,5 +369,33 @@ if (10 > 1) {
             .unwrap(),
             expected
         );
+    }
+
+    #[test]
+    fn test_error_handling() {
+        match test_eval("5 + true;") {
+            Ok(_) => todo!(),
+            Err(e) => assert_eq!(e.to_string(), "type mismatch: INTEGER + BOOLEAN"),
+        }
+
+        match test_eval("5 + true; 5;") {
+            Ok(_) => todo!(),
+            Err(e) => assert_eq!(e.to_string(), "type mismatch: INTEGER + BOOLEAN"),
+        }
+
+        match test_eval("-true") {
+            Ok(_) => todo!(),
+            Err(e) => assert_eq!(e.to_string(), "unknown operator: -BOOLEAN"),
+        }
+
+        match test_eval("true + false") {
+            Ok(_) => todo!(),
+            Err(e) => assert_eq!(e.to_string(), "unknown operator: BOOLEAN + BOOLEAN"),
+        }
+
+        match test_eval("if (10 > 1) { if (10 > 1) {return true + false;} return 1; }") {
+            Ok(_) => todo!(),
+            Err(e) => assert_eq!(e.to_string(), "unknown operator: BOOLEAN + BOOLEAN"),
+        }
     }
 }

@@ -7,6 +7,7 @@ pub enum Object {
     Boolean(bool),
     Null,
     ReturnValue(Rc<Object>),
+    Error(String),
 }
 
 impl fmt::Display for Object {
@@ -16,6 +17,7 @@ impl fmt::Display for Object {
             Object::Boolean(b) => write!(f, "{}", b),
             Object::Null => write!(f, "null"),
             Object::ReturnValue(x) => write!(f, "{}", x),
+            Object::Error(e) => write!(f, "ERROR: {}", e),
         }
     }
 }
@@ -27,6 +29,7 @@ impl Object {
             Object::Boolean(_) => "BOOLEAN".into(),
             Object::Null => "NULL".into(),
             Object::ReturnValue(_) => "RETURN_VALUE".into(),
+            Object::Error(_) => "ERROR_OBJ".into(),
         }
     }
 }
