@@ -120,6 +120,7 @@ pub enum Expression {
         function: Box<Expression>,
         arguments: Vec<Expression>,
     },
+    StringLiteral(String),
 }
 
 impl fmt::Display for Expression {
@@ -167,6 +168,7 @@ impl fmt::Display for Expression {
                 }
                 write!(f, "{}({})", function, args.join(", "))
             }
+            Expression::StringLiteral(s) => write!(f, "{}", s),
         }
     }
 }

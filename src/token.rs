@@ -54,6 +54,8 @@ pub enum TokenKind {
     If,
     Else,
     Return,
+
+    String(String),
 }
 
 impl TokenKind {
@@ -105,6 +107,7 @@ impl fmt::Display for TokenKind {
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::Return => write!(f, "return"),
+            TokenKind::String(s) => write!(f, "\"{}\"", s),
         }
     }
 }

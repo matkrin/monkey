@@ -173,6 +173,7 @@ impl<'a> Parser<'a> {
             TokenKind::If => self.parse_if_expression()?,
             TokenKind::Function => self.parse_function_literal()?,
             TokenKind::Minus | TokenKind::Bang => self.parse_prefix_expression()?,
+            TokenKind::String(s) => Expression::StringLiteral(s.into()),
             _ => miette::bail!("Cannot parse expression yet"),
         };
 
@@ -885,6 +886,15 @@ return 993322;
                     },
                 ]
             })
+        );
+    }
+
+    #[test]
+    fn test_string_literal_expression() {
+        let program = program_from_input(r#""hello world";"#);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::StringLiteral("hello world".into()))
         );
     }
 }

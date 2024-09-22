@@ -1,8 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::RefCell,
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{Expression, Node, Program, Statement},
@@ -22,7 +18,7 @@ pub fn eval(node: Node, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
 fn eval_program(program: &Program, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
     let mut result = Rc::new(Object::Null);
     for stmt in program.statements() {
-        result = eval_statement(stmt, &env)?;
+        result = eval_statement(stmt, env)?;
 
         // TODO return the inner of ReturnValue ???
         if let Object::ReturnValue(_) = *result {
@@ -35,16 +31,16 @@ fn eval_program(program: &Program, env: &Rc<RefCell<Environment>>) -> Result<Rc<
 fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
     match statement {
         Statement::Let { token, name, value } => {
-            let val = eval_expression(value, &env)?;
+            let val = eval_expression(value, env)?;
             let mut borrow_env = env.as_ref().borrow_mut();
             borrow_env.set(name.into(), val);
             Ok(Rc::new(Object::Null))
         }
         Statement::Return { token, value } => {
-            let val = eval_expression(value, &env)?;
+            let val = eval_expression(value, env)?;
             Ok(Rc::new(Object::ReturnValue(val)))
         }
-        Statement::Expr(expr) => Ok(eval_expression(expr, &env)?),
+        Statement::Expr(expr) => Ok(eval_expression(expr, env)?),
     }
 }
 
@@ -98,7 +94,7 @@ fn eval_expression(expression: &Expression, env: &Rc<RefCell<Environment>>) -> R
         Expression::FunctionLiteral { parameters, body } => Ok(Rc::new(Object::Function {
             parameters: parameters.clone(),
             body: body.clone(),
-            env: Rc::clone(&env),
+            env: Rc::clone(env),
         })),
         Expression::Call {
             function,
@@ -108,6 +104,7 @@ fn eval_expression(expression: &Expression, env: &Rc<RefCell<Environment>>) -> R
             let args = eval_expressions(arguments, env)?;
             apply_function(func, args)
         }
+        Expression::StringLiteral(s) => Ok(Rc::new(Object::String(s.into()))),
     }
 }
 
@@ -175,6 +172,10 @@ fn eval_infix_expression(operator: &str, left: &Object, right: &Object) -> Resul
 
         (Object::Boolean(l), "==", Object::Boolean(r)) => Ok(Rc::new(Object::Boolean(l == r))),
         (Object::Boolean(l), "!=", Object::Boolean(r)) => Ok(Rc::new(Object::Boolean(l != r))),
+
+        (Object::String(l), "+", Object::String(r)) => {
+            Ok(Rc::new(Object::String(format!("{}{}", l, r))))
+        }
         _ => Err(miette::miette!(
             severity = Severity::Error,
             //code = "expected::rparen",
@@ -203,7 +204,11 @@ fn eval_expressions(
 
 fn apply_function(func: Rc<Object>, args: Vec<Rc<Object>>) -> Result<Rc<Object>> {
     match func.as_ref() {
-        Object::Function { parameters, body, env } => {
+        Object::Function {
+            parameters,
+            body,
+            env,
+        } => {
             let extended_env = {
                 let mut new_env = Environment::new_enclosed(Rc::clone(env));
                 for (param_idx, param) in parameters.iter().enumerate() {
@@ -217,7 +222,7 @@ fn apply_function(func: Rc<Object>, args: Vec<Rc<Object>>) -> Result<Rc<Object>>
                 Object::ReturnValue(rc) => Ok(Rc::clone(rc)),
                 _ => Ok(evaluated),
             }
-        },
+        }
         _ => Err(miette::miette!("not a function: {}", func.r#type())),
     }
 }
@@ -553,4 +558,21 @@ addTwo(2);
         assert_eq!(test_eval(input).unwrap(), Rc::new(Object::Integer(4)));
     }
 
+    #[test]
+    fn test_string_literal() {
+        let input = r#""Hello World!""#;
+        assert_eq!(
+            test_eval(input).unwrap(),
+            Rc::new(Object::String("Hello World!".into()))
+        );
+    }
+
+    #[test]
+    fn test_string_concatenation() {
+        let input = r#""Hello" + " " + "World!""#;
+        assert_eq!(
+            test_eval(input).unwrap(),
+            Rc::new(Object::String("Hello World!".into()))
+        );
+    }
 }

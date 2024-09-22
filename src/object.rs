@@ -14,6 +14,7 @@ pub enum Object {
         body: BlockStatement,
         env: Rc<RefCell<Environment>>,
     },
+    String(String),
 }
 
 impl fmt::Display for Object {
@@ -34,6 +35,7 @@ impl fmt::Display for Object {
                 }
                 write!(f, "fn({}){{\n{}\n}}", params.join(", "), body)
             }
+            Object::String(s) => write!(f, "{}", s),
         }
     }
 }
@@ -50,6 +52,7 @@ impl Object {
                 body: _,
                 env: _,
             } => "FUNCTION".into(),
+            Object::String(_) => "STRING".into(),
         }
     }
 }
