@@ -81,6 +81,9 @@ impl Identifier {
     pub fn new(identifier: String) -> Self {
         Self(identifier)
     }
+    pub fn value(&self) -> &str {
+        &self.0
+    }
 }
 impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

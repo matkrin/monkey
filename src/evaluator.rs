@@ -1,24 +1,28 @@
-use std::rc::Rc;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    rc::Rc,
+};
 
 use crate::{
     ast::{Expression, Node, Program, Statement},
-    object::Object,
+    object::{Environment, Object},
 };
 
 use miette::{Result, Severity};
 
-pub fn eval(node: Node) -> Result<Rc<Object>> {
+pub fn eval(node: Node, env: &RefCell<Environment>) -> Result<Rc<Object>> {
     match node {
-        Node::Program(program) => eval_program(&program),
-        Node::Statement(stmt) => eval_statement(&stmt),
-        Node::Expression(expr) => eval_expression(&expr),
+        Node::Program(program) => eval_program(&program, env),
+        Node::Statement(stmt) => eval_statement(&stmt, env),
+        Node::Expression(expr) => eval_expression(&expr, env),
     }
 }
 
-fn eval_program(program: &Program) -> Result<Rc<Object>> {
+fn eval_program(program: &Program, env: &RefCell<Environment>) -> Result<Rc<Object>> {
     let mut result = Rc::new(Object::Null);
     for stmt in program.statements() {
-        result = eval_statement(stmt)?;
+        result = eval_statement(stmt, env)?;
 
         // TODO return the inner of ReturnValue ???
         if let Object::ReturnValue(_) = *result {
@@ -28,28 +32,39 @@ fn eval_program(program: &Program) -> Result<Rc<Object>> {
     Ok(result)
 }
 
-fn eval_statement(statement: &Statement) -> Result<Rc<Object>> {
+fn eval_statement(statement: &Statement, env: &RefCell<Environment>) -> Result<Rc<Object>> {
     match statement {
-        Statement::Let { token, name, value } => todo!(),
+        Statement::Let { token, name, value } => {
+            let val = eval_expression(value, env)?;
+            let mut env = env.borrow_mut();
+            env.set(name.into(), val);
+            Ok(Rc::new(Object::Null))
+        }
         Statement::Return { token, value } => {
-            let val = eval_expression(value)?;
+            let val = eval_expression(value, env)?;
             Ok(Rc::new(Object::ReturnValue(val)))
         }
-        Statement::Expr(expr) => Ok(eval_expression(expr)?),
+        Statement::Expr(expr) => Ok(eval_expression(expr, env)?),
     }
 }
 
-fn eval_expression(expression: &Expression) -> Result<Rc<Object>> {
+fn eval_expression(expression: &Expression, env: &RefCell<Environment>) -> Result<Rc<Object>> {
     match expression {
         Expression::IntegerLiteral(i) => Ok(Rc::new(Object::Integer(*i))),
         Expression::Boolean(b) => Ok(Rc::new(Object::Boolean(*b))),
-        Expression::Ident(identifier) => todo!(),
+        Expression::Ident(identifier) => {
+            let name = identifier.value();
+            match env.borrow().get(name) {
+                Some(val) => Ok(Rc::clone(val)),
+                None => Err(miette::miette!("identifier not found: {}", name,)),
+            }
+        }
         Expression::Prefix {
             token,
             operator,
             right,
         } => {
-            let right_obj = eval_expression(right)?;
+            let right_obj = eval_expression(right, env)?;
             eval_prefix_expression(operator, &right_obj)
         }
         Expression::Infix {
@@ -58,8 +73,8 @@ fn eval_expression(expression: &Expression) -> Result<Rc<Object>> {
             left,
             right,
         } => {
-            let left_obj = eval_expression(left)?;
-            let right_obj = eval_expression(right)?;
+            let left_obj = eval_expression(left, env)?;
+            let right_obj = eval_expression(right, env)?;
             eval_infix_expression(operator, &left_obj, &right_obj)
         }
         Expression::If {
@@ -67,12 +82,12 @@ fn eval_expression(expression: &Expression) -> Result<Rc<Object>> {
             consequence,
             alternative,
         } => {
-            let condition = eval_expression(condition)?;
+            let condition = eval_expression(condition, env)?;
             match is_truthy(&condition) {
-                true => eval_program(consequence),
+                true => eval_program(consequence, env),
                 false => {
                     if let Some(alt) = alternative {
-                        eval_program(alt)
+                        eval_program(alt, env)
                     } else {
                         Ok(Rc::new(Object::Null))
                     }
@@ -182,7 +197,8 @@ mod tests {
     fn test_eval(input: &str) -> Result<Rc<Object>> {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
-        eval(Node::Program(parser.parse_program()))
+        let environment = RefCell::new(Environment::new());
+        eval(Node::Program(parser.parse_program()), &environment)
     }
 
     #[test]
@@ -374,28 +390,53 @@ if (10 > 1) {
     #[test]
     fn test_error_handling() {
         match test_eval("5 + true;") {
-            Ok(_) => todo!(),
+            Ok(_) => unreachable!(),
             Err(e) => assert_eq!(e.to_string(), "type mismatch: INTEGER + BOOLEAN"),
         }
 
         match test_eval("5 + true; 5;") {
-            Ok(_) => todo!(),
+            Ok(_) => unreachable!(),
             Err(e) => assert_eq!(e.to_string(), "type mismatch: INTEGER + BOOLEAN"),
         }
 
         match test_eval("-true") {
-            Ok(_) => todo!(),
+            Ok(_) => unreachable!(),
             Err(e) => assert_eq!(e.to_string(), "unknown operator: -BOOLEAN"),
         }
 
         match test_eval("true + false") {
-            Ok(_) => todo!(),
+            Ok(_) => unreachable!(),
             Err(e) => assert_eq!(e.to_string(), "unknown operator: BOOLEAN + BOOLEAN"),
         }
 
         match test_eval("if (10 > 1) { if (10 > 1) {return true + false;} return 1; }") {
-            Ok(_) => todo!(),
+            Ok(_) => unreachable!(),
             Err(e) => assert_eq!(e.to_string(), "unknown operator: BOOLEAN + BOOLEAN"),
         }
+
+        match test_eval("foobar") {
+            Ok(_) => unreachable!(),
+            Err(e) => assert_eq!(e.to_string(), "identifier not found: foobar"),
+        }
+    }
+
+    #[test]
+    fn test_let_statements() {
+        assert_eq!(
+            test_eval("let a = 5; a;").unwrap(),
+            Rc::new(Object::Integer(5))
+        );
+        assert_eq!(
+            test_eval("let a = 5 * 5; a;").unwrap(),
+            Rc::new(Object::Integer(25))
+        );
+        assert_eq!(
+            test_eval("let a = 5; let b = a; b;").unwrap(),
+            Rc::new(Object::Integer(5))
+        );
+        assert_eq!(
+            test_eval("let a = 5; let b = a; let c = a + b + 5; c;").unwrap(),
+            Rc::new(Object::Integer(15))
+        );
     }
 }
