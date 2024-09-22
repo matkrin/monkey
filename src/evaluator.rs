@@ -11,7 +11,7 @@ use crate::{
 
 use miette::{Result, Severity};
 
-pub fn eval(node: Node, env: &RefCell<Environment>) -> Result<Rc<Object>> {
+pub fn eval(node: Node, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
     match node {
         Node::Program(program) => eval_program(&program, env),
         Node::Statement(stmt) => eval_statement(&stmt, env),
@@ -19,10 +19,10 @@ pub fn eval(node: Node, env: &RefCell<Environment>) -> Result<Rc<Object>> {
     }
 }
 
-fn eval_program(program: &Program, env: &RefCell<Environment>) -> Result<Rc<Object>> {
+fn eval_program(program: &Program, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
     let mut result = Rc::new(Object::Null);
     for stmt in program.statements() {
-        result = eval_statement(stmt, env)?;
+        result = eval_statement(stmt, &env)?;
 
         // TODO return the inner of ReturnValue ???
         if let Object::ReturnValue(_) = *result {
@@ -32,30 +32,31 @@ fn eval_program(program: &Program, env: &RefCell<Environment>) -> Result<Rc<Obje
     Ok(result)
 }
 
-fn eval_statement(statement: &Statement, env: &RefCell<Environment>) -> Result<Rc<Object>> {
+fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
     match statement {
         Statement::Let { token, name, value } => {
-            let val = eval_expression(value, env)?;
-            let mut env = env.borrow_mut();
-            env.set(name.into(), val);
+            let val = eval_expression(value, &env)?;
+            let mut borrow_env = env.as_ref().borrow_mut();
+            borrow_env.set(name.into(), val);
             Ok(Rc::new(Object::Null))
         }
         Statement::Return { token, value } => {
-            let val = eval_expression(value, env)?;
+            let val = eval_expression(value, &env)?;
             Ok(Rc::new(Object::ReturnValue(val)))
         }
-        Statement::Expr(expr) => Ok(eval_expression(expr, env)?),
+        Statement::Expr(expr) => Ok(eval_expression(expr, &env)?),
     }
 }
 
-fn eval_expression(expression: &Expression, env: &RefCell<Environment>) -> Result<Rc<Object>> {
+fn eval_expression(expression: &Expression, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
     match expression {
         Expression::IntegerLiteral(i) => Ok(Rc::new(Object::Integer(*i))),
         Expression::Boolean(b) => Ok(Rc::new(Object::Boolean(*b))),
         Expression::Ident(identifier) => {
             let name = identifier.value();
-            match env.borrow().get(name) {
-                Some(val) => Ok(Rc::clone(val)),
+            let env = env.as_ref().borrow();
+            match env.get(name) {
+                Some(val) => Ok(Rc::clone(&val)),
                 None => Err(miette::miette!("identifier not found: {}", name,)),
             }
         }
@@ -94,11 +95,19 @@ fn eval_expression(expression: &Expression, env: &RefCell<Environment>) -> Resul
                 }
             }
         }
-        Expression::FunctionLiteral { parameters, body } => todo!(),
+        Expression::FunctionLiteral { parameters, body } => Ok(Rc::new(Object::Function {
+            parameters: parameters.clone(),
+            body: body.clone(),
+            env: Rc::clone(&env),
+        })),
         Expression::Call {
             function,
             arguments,
-        } => todo!(),
+        } => {
+            let func = eval_expression(function, env)?;
+            let args = eval_expressions(arguments, env)?;
+            apply_function(func, args)
+        }
     }
 }
 
@@ -180,6 +189,39 @@ fn eval_infix_expression(operator: &str, left: &Object, right: &Object) -> Resul
     }
 }
 
+fn eval_expressions(
+    expressions: &[Expression],
+    env: &Rc<RefCell<Environment>>,
+) -> Result<Vec<Rc<Object>>> {
+    let mut result = Vec::new();
+    for exp in expressions {
+        let evaluated = eval_expression(exp, env)?;
+        result.push(evaluated);
+    }
+    Ok(result)
+}
+
+fn apply_function(func: Rc<Object>, args: Vec<Rc<Object>>) -> Result<Rc<Object>> {
+    match func.as_ref() {
+        Object::Function { parameters, body, env } => {
+            let extended_env = {
+                let mut new_env = Environment::new_enclosed(Rc::clone(env));
+                for (param_idx, param) in parameters.iter().enumerate() {
+                    new_env.set(param.value().into(), Rc::clone(&args[param_idx]));
+                }
+                new_env
+            };
+            let extended_env = Rc::new(RefCell::new(extended_env));
+            let evaluated = eval_program(body, &extended_env)?;
+            match evaluated.as_ref() {
+                Object::ReturnValue(rc) => Ok(Rc::clone(rc)),
+                _ => Ok(evaluated),
+            }
+        },
+        _ => Err(miette::miette!("not a function: {}", func.r#type())),
+    }
+}
+
 fn is_truthy(obj: &Object) -> bool {
     match obj {
         Object::Null => false,
@@ -190,14 +232,19 @@ fn is_truthy(obj: &Object) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexer::Lexer, parser::Parser};
+    use crate::{
+        ast::Identifier,
+        lexer::Lexer,
+        parser::Parser,
+        token::{Token, TokenKind},
+    };
 
     use super::*;
 
     fn test_eval(input: &str) -> Result<Rc<Object>> {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
-        let environment = RefCell::new(Environment::new());
+        let environment = Rc::new(RefCell::new(Environment::new()));
         eval(Node::Program(parser.parse_program()), &environment)
     }
 
@@ -439,4 +486,71 @@ if (10 > 1) {
             Rc::new(Object::Integer(15))
         );
     }
+
+    #[test]
+    fn test_function_object() {
+        let input = "fn(x) { x + 2; };";
+        let mut body = Program::new();
+        body.push(Statement::Expr(Expression::Infix {
+            token: Token::new(TokenKind::Plus, 10, 10),
+            operator: "+".into(),
+            left: Box::new(Expression::Ident(Identifier::new("x".to_string()))),
+            right: Box::new(Expression::IntegerLiteral(2)),
+        }));
+        let environment = Environment::new();
+        let env = Rc::new(RefCell::new(environment));
+
+        assert_eq!(
+            test_eval(input).unwrap(),
+            Rc::new(Object::Function {
+                parameters: vec![Identifier::new("x".into())],
+                body,
+                env,
+            })
+        );
+    }
+
+    #[test]
+    fn test_function_application() {
+        assert_eq!(
+            test_eval("let identity = fn(x) { x; }; identity(5);").unwrap(),
+            Rc::new(Object::Integer(5))
+        );
+        assert_eq!(
+            test_eval("let identity = fn(x) { return x; }; identity(5);").unwrap(),
+            Rc::new(Object::Integer(5))
+        );
+        assert_eq!(
+            test_eval("let double = fn(x) { x * 2; }; double(5);").unwrap(),
+            Rc::new(Object::Integer(10))
+        );
+        assert_eq!(
+            test_eval("let add = fn(x, y) { x + y; }; add(5, 5);").unwrap(),
+            Rc::new(Object::Integer(10))
+        );
+        assert_eq!(
+            test_eval("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));").unwrap(),
+            Rc::new(Object::Integer(20))
+        );
+        assert_eq!(
+            test_eval("fn(x) { x; }(5)").unwrap(),
+            Rc::new(Object::Integer(5))
+        );
+    }
+
+    #[test]
+    fn test_closures() {
+        let input = "
+let newAdder = fn(x)
+    { fn(y) {
+        x + y
+    };
+};
+
+let addTwo = newAdder(2);
+addTwo(2);
+";
+        assert_eq!(test_eval(input).unwrap(), Rc::new(Object::Integer(4)));
+    }
+
 }

@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::io::{self, BufRead, BufReader};
 use std::io::{Read, Write};
+use std::rc::Rc;
 
 use ast::Node;
 use evaluator::eval;
@@ -26,7 +27,7 @@ fn main() {
 fn start_repl(stdin: impl Read, mut stdout: impl Write) {
     let mut stdin = BufReader::new(stdin);
     let mut input = String::new();
-    let environment = RefCell::new(Environment::new());
+    let environment = Rc::new(RefCell::new(Environment::new()));
 
     loop {
         input.clear();
