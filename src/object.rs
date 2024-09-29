@@ -1,6 +1,6 @@
 use core::fmt;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use miette::Result;
+use std::{cell::RefCell, collections::HashMap, hash, rc::Rc};
 
 use crate::ast::{BlockStatement, Identifier};
 
@@ -18,6 +18,7 @@ pub enum Object {
     String(String),
     Builtin(fn(Vec<Rc<Object>>) -> Result<Rc<Object>>),
     Array(Vec<Rc<Object>>),
+    Hash(HashMap<Rc<Object>, Rc<Object>>)
 }
 
 impl fmt::Display for Object {
@@ -40,7 +41,11 @@ impl fmt::Display for Object {
             Object::Array(v) => {
                 let elements: Vec<_> = v.iter().map(|it| it.to_string()).collect();
                 write!(f, "[{}]", elements.join(", "))
-            },
+            }
+            Object::Hash(map) => {
+                let pairs: Vec<_> = map.iter().map(|(key, val)|  format!("{}: {}", key, val) ).collect();
+                write!(f, "{{{}}}", pairs.join(", "))
+            }
         }
     }
 }
@@ -59,7 +64,26 @@ impl Object {
             } => "FUNCTION".into(),
             Object::String(_) => "STRING".into(),
             Object::Builtin(_) => "BUITLIN".into(),
-            Object::Array(_) => "Array".into(),
+            Object::Array(_) => "ARRAY".into(),
+            Object::Hash(_) => "HASH".into(),
+        }
+    }
+
+    pub fn is_hashable(&self) -> bool {
+        matches!(
+            self,
+            Object::Integer(_) | Object::Boolean(_) | Object::String(_)
+        )
+    }
+}
+
+impl hash::Hash for Object {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Object::Integer(i) => i.hash(state),
+            Object::Boolean(b) => b.hash(state),
+            Object::String(s) => s.hash(state),
+            _ => panic!("Only Integers, Booleans and Strings are allowed as keys in a map"),
         }
     }
 }

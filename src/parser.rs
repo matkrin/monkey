@@ -16,7 +16,7 @@ enum Precedence {
     Product,
     Prefix,
     Call,
-    Index
+    Index,
 }
 
 impl From<&Token> for Precedence {
@@ -178,8 +178,9 @@ impl<'a> Parser<'a> {
             TokenKind::String(s) => Expression::StringLiteral(s.into()),
             TokenKind::LBracket => {
                 Expression::ArrayLiteral(self.parse_expression_list(TokenKind::RBracket)?)
-            }
-            _ => miette::bail!("Cannot parse expression yet"),
+            },
+            TokenKind::LBrace => self.parse_hash_literal()?,
+            _ => miette::bail!("Unexpected Token: {}", &self.current_token.kind),
         };
 
         while self.peek_token.kind != TokenKind::Semicolon && precedence < self.peek_precedence() {
@@ -461,13 +462,48 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        Ok(Expression::IndexExpression {
+        Ok(Expression::IndexExpr {
             left: Box::new(left),
             index: Box::new(index),
         })
     }
+
+    fn parse_hash_literal(&mut self) -> Result<Expression> {
+        let mut pairs = Vec::new();
+
+        while self.peek_token.kind != TokenKind::RBrace {
+            self.next_token();
+            let key = self.parse_expression(Precedence::Lowest)?;
+
+            if self.peek_token.kind != TokenKind::Colon {
+                return Err(miette::miette!("Expected Colon"));
+            }
+            self.next_token();
+            self.next_token();
+
+            let value = self.parse_expression(Precedence::Lowest)?;
+            pairs.push((key, value));
+
+            if self.peek_token.kind != TokenKind::RBrace && self.peek_token.kind != TokenKind::Comma {
+                return Err(miette::miette!("Expected RBrace or Comma"))
+            }
+
+            if self.peek_token.kind == TokenKind::Comma {
+                self.next_token();
+            }
+        }
+
+        if self.peek_token.kind != TokenKind::RBrace {
+            return Err(miette::miette!("Expected RBrace"))
+        }
+
+        self.next_token();
+
+        Ok(Expression::HashLiteral(pairs))
+    }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -993,7 +1029,7 @@ return 993322;
         let program = program_from_input("myArray[1 + 1]");
         assert_eq!(
             program[0],
-            Statement::Expr(Expression::IndexExpression {
+            Statement::Expr(Expression::IndexExpr {
                 left: Box::new(Expression::Ident(Identifier::new("myArray".into()))),
                 index: Box::new(Expression::Infix {
                     token: Token::new(TokenKind::Plus, 10, 10),
@@ -1003,5 +1039,72 @@ return 993322;
                 })
             })
         )
+    }
+
+    #[test]
+    fn test_parsing_hash_literal_string_keys() {
+        let program = program_from_input(r#"{"one": 1, "two": 2, "three": 3}"#);
+        dbg!(&program);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::HashLiteral(vec![
+                (
+                    Expression::StringLiteral("one".into()),
+                    Expression::IntegerLiteral(1)
+                ),
+                (
+                    Expression::StringLiteral("two".into()),
+                    Expression::IntegerLiteral(2)
+                ),
+                (
+                    Expression::StringLiteral("three".into()),
+                    Expression::IntegerLiteral(3)
+                ),
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_parsing_emtpy_hash_literal() {
+        let program = program_from_input(r#"{}"#);
+
+        assert_eq!(program[0], Statement::Expr(Expression::HashLiteral(vec![])));
+    }
+
+    #[test]
+    fn test_parsing_hash_literal_with_expressions() {
+        let program = program_from_input(r#"{"one": 0 + 1, "two": 10 - 8, "three": 15 / 5}"#);
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::HashLiteral(vec![
+                (
+                    Expression::StringLiteral("one".into()),
+                    Expression::Infix {
+                        token: Token::new(TokenKind::Plus, 10, 10),
+                        operator: "+".into(),
+                        left: Box::new(Expression::IntegerLiteral(0)),
+                        right: Box::new(Expression::IntegerLiteral(1)),
+                    }
+                ),
+                (
+                    Expression::StringLiteral("two".into()),
+                    Expression::Infix {
+                        token: Token::new(TokenKind::Minus, 25, 25),
+                        operator: "-".into(),
+                        left: Box::new(Expression::IntegerLiteral(10)),
+                        right: Box::new(Expression::IntegerLiteral(8)),
+                    }
+                ),
+                (
+                    Expression::StringLiteral("three".into()),
+                    Expression::Infix {
+                        token: Token::new(TokenKind::Slash, 42, 42),
+                        operator: "/".into(),
+                        left: Box::new(Expression::IntegerLiteral(15)),
+                        right: Box::new(Expression::IntegerLiteral(5)),
+                    }
+                ),
+            ]))
+        );
     }
 }

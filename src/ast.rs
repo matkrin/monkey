@@ -1,5 +1,5 @@
 use fmt::Write;
-use std::{fmt, ops};
+use std::{collections::HashMap, fmt, ops};
 
 use crate::token::Token;
 
@@ -122,10 +122,11 @@ pub enum Expression {
     },
     StringLiteral(String),
     ArrayLiteral(Vec<Expression>),
-    IndexExpression {
+    IndexExpr {
         left: Box<Expression>,
         index: Box<Expression>,
     },
+    HashLiteral(Vec<(Expression, Expression)>),
 }
 
 impl fmt::Display for Expression {
@@ -172,7 +173,11 @@ impl fmt::Display for Expression {
                 let elements: Vec<_> = v.iter().map(|it| it.to_string()).collect();
                 write!(f, "[{}]", elements.join(", "))
             }
-            Expression::IndexExpression { left, index } => write!(f, "({}[{}])", left, index),
+            Expression::IndexExpr { left, index } => write!(f, "({}[{}])", left, index),
+            Expression::HashLiteral(v) => {
+                let pairs: Vec<_> = v .iter() .map(|(key, val)| format!("{}:{}", key, val)) .collect();
+                write!(f, "{{{}}}", pairs.join(", "))
+            }
         }
     }
 }

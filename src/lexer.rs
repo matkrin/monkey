@@ -76,6 +76,7 @@ impl<'a> Lexer<'a> {
             Some('}') => Token::new(TokenKind::RBrace, self.position, self.position),
             Some('[') => Token::new(TokenKind::LBracket, self.position, self.position),
             Some(']') => Token::new(TokenKind::RBracket, self.position, self.position),
+            Some(':') => Token::new(TokenKind::Colon, self.position, self.position),
             Some('"') => {
                 let (literal, span) = self.read_string();
                 let token_kind = TokenKind::String(literal);
@@ -157,6 +158,7 @@ fn is_digit(character: char) -> bool {
     character.is_ascii_digit()
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -184,6 +186,7 @@ if (5 < 10) {
 "foobar"
 "foo bar"
 [1, 2];
+{"foo": "bar"}
 "#;
 
         let mut lexer = Lexer::new(input);
@@ -387,7 +390,13 @@ if (5 < 10) {
         assert_eq!(lexer.next_token(), Token::new(TokenKind::Int("2".into()), 215, 215));
         assert_eq!(lexer.next_token(), Token::new(TokenKind::RBracket, 216, 216));
         assert_eq!(lexer.next_token(), Token::new(TokenKind::Semicolon, 217, 217));
+        // {"foo": "bar"}
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::LBrace, 219, 219));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::String("foo".into()), 220, 224));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::Colon, 225, 225));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::String("bar".into()), 227, 231));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::RBrace, 232, 232));
         //
-        assert_eq!(lexer.next_token(), Token::new(TokenKind::Eof, 219, 219));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::Eof, 234, 234));
     }
 }

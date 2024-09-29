@@ -57,7 +57,8 @@ pub enum TokenKind {
 
     String(String),
     LBracket,
-    RBracket
+    RBracket,
+    Colon,
 }
 
 impl TokenKind {
@@ -112,6 +113,7 @@ impl fmt::Display for TokenKind {
             TokenKind::String(s) => write!(f, "\"{}\"", s),
             TokenKind::LBracket => write!(f, "["),
             TokenKind::RBracket => write!(f, "]"),
+            TokenKind::Colon => write!(f, ":"),
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{Expression, Node, Program, Statement},
@@ -114,11 +114,12 @@ fn eval_expression(expression: &Expression, env: &Rc<RefCell<Environment>>) -> R
             let elements = eval_expressions(v, env)?;
             Ok(Rc::new(Object::Array(elements)))
         }
-        Expression::IndexExpression { left, index } => {
+        Expression::IndexExpr { left, index } => {
             let left = eval_expression(left, env)?;
             let index = eval_expression(index, env)?;
             eval_index_expression(left, index)
         }
+        Expression::HashLiteral(v) => eval_hash_literal(v.clone(), env),
     }
 }
 
@@ -216,24 +217,44 @@ fn eval_expressions(
     Ok(result)
 }
 
-fn eval_index_expression(array: Rc<Object>, index: Rc<Object>) -> Result<Rc<Object>> {
-    let idx = match index.as_ref() {
-        Object::Integer(i) => *i,
-        _ => return Err(miette::miette!("Indexing only with integers")),
-    };
-
-    match array.as_ref() {
-        Object::Array(v) => {
+fn eval_index_expression(left: Rc<Object>, index: Rc<Object>) -> Result<Rc<Object>> {
+    match (left.as_ref(), index.as_ref()) {
+        (Object::Array(v), Object::Integer(idx)) => {
             let max = (v.len() - 1) as isize;
 
-            if idx < 0 || idx > max {
+            if *idx < 0 || *idx > max {
                 return Ok(Rc::new(Object::Null));
             }
 
-            Ok(Rc::clone(&v[idx as usize]))
+            Ok(Rc::clone(&v[*idx as usize]))
         }
-        _ => Err(miette::miette!("Indexing only for arrays")),
+        (Object::Hash(map), _) => {
+            if !index.is_hashable() {
+                return Err(miette::miette!("unusable as hash key: {}", index.r#type()))
+            }
+
+            match map.get(&index) {
+                Some(obj) => Ok(Rc::clone(obj)),
+                None => Ok(Rc::new(Object::Null)),
+            }
+        }
+        _ => Err(miette::miette!("Indexing only for arrays and maps")),
     }
+}
+
+fn eval_hash_literal(v: Vec<(Expression, Expression)>, env: &Rc<RefCell<Environment>>) -> Result<Rc<Object>> {
+    //let pairs = HashMap::new();
+    let pairs: Result<HashMap<_,_>> = v.iter().map(|(key, val)| {
+        let key = eval_expression(key, env)?;
+        let value = eval_expression(val, env)?;
+        if key.is_hashable() {
+            Ok((key, value))
+        } else {
+            Err(miette::miette!("Type of {} cannot be used as a key", key.r#type()))
+        }
+    }).collect();
+
+    pairs.map(|pairs| Rc::new(Object::Hash(pairs)))
 }
 
 fn apply_function(func: Rc<Object>, args: Vec<Rc<Object>>) -> Result<Rc<Object>> {
@@ -272,6 +293,8 @@ fn is_truthy(obj: &Object) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{
         ast::Identifier,
         lexer::Lexer,
@@ -691,5 +714,39 @@ addTwo(2);
         );
         assert_eq!(test_eval("[1, 2, 3][3]").unwrap(), Rc::new(Object::Null));
         assert_eq!(test_eval("[1, 2, 3][-1]").unwrap(), Rc::new(Object::Null));
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let input = r#"let two = "two";
+{
+    "one": 10 - 9,
+    two: 1 + 1,
+    "thr" + "ee": 6 / 2,
+    4: 4,
+    true: 5,
+    false: 6,
+}"#;
+        let mut expected = HashMap::new();
+        expected.insert(Object::String("one".into()), Object::Integer(1));
+        expected.insert(Object::String("two".into()), Object::Integer(2));
+        expected.insert(Object::String("three".into()), Object::Integer(3));
+        expected.insert(Object::Integer(4), Object::Integer(4));
+        expected.insert(Object::Boolean(true), Object::Integer(5));
+        expected.insert(Object::Boolean(false), Object::Integer(6));
+        let ex = expected.into_iter().map(|(key, val)| (Rc::new(key), Rc::new(val))).collect();
+
+        assert_eq!(test_eval(input).unwrap(), Rc::new(Object::Hash(ex)));
+    }
+
+    #[test]
+    fn test_hash_index_expressions() {
+        assert_eq!(test_eval(r#"{"foo": 5}["foo"]"#).unwrap(), Rc::new(Object::Integer(5)));
+        assert_eq!(test_eval(r#"{"foo": 5}["bar"]"#).unwrap(), Rc::new(Object::Null));
+        assert_eq!(test_eval(r#"let key = "foo"; {"foo": 5}[key]"#).unwrap(), Rc::new(Object::Integer(5)));
+        assert_eq!(test_eval(r#"{}["foo"]"#).unwrap(), Rc::new(Object::Null));
+        assert_eq!(test_eval(r#"{5: 5}[5]"#).unwrap(), Rc::new(Object::Integer(5)));
+        assert_eq!(test_eval(r#"{true: 5}[true]"#).unwrap(), Rc::new(Object::Integer(5)));
+        assert_eq!(test_eval(r#"{false: 5}[false]"#).unwrap(), Rc::new(Object::Integer(5)));
     }
 }
