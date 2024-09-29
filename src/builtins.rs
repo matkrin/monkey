@@ -10,6 +10,7 @@ pub const BUILTINS: LazyCell<HashMap<String, Rc<Object>>> = LazyCell::new(|| {
     b.insert("last".into(), Rc::new(Object::Builtin(last)));
     b.insert("rest".into(), Rc::new(Object::Builtin(rest)));
     b.insert("push".into(), Rc::new(Object::Builtin(push)));
+    b.insert("puts".into(), Rc::new(Object::Builtin(puts)));
     b
 });
 
@@ -121,4 +122,11 @@ fn push(args: Vec<Rc<Object>>) -> Result<Rc<Object>> {
             args[0].r#type()
         )),
     }
+}
+
+fn puts(args: Vec<Rc<Object>>) -> Result<Rc<Object>> {
+    for arg in args {
+        println!("{}", arg);
+    }
+    Ok(Rc::new(Object::Null))
 }
