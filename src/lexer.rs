@@ -74,6 +74,8 @@ impl<'a> Lexer<'a> {
             Some(')') => Token::new(TokenKind::RParen, self.position, self.position),
             Some('{') => Token::new(TokenKind::LBrace, self.position, self.position),
             Some('}') => Token::new(TokenKind::RBrace, self.position, self.position),
+            Some('[') => Token::new(TokenKind::LBracket, self.position, self.position),
+            Some(']') => Token::new(TokenKind::RBracket, self.position, self.position),
             Some('"') => {
                 let (literal, span) = self.read_string();
                 let token_kind = TokenKind::String(literal);
@@ -181,6 +183,7 @@ if (5 < 10) {
 10 != 9;
 "foobar"
 "foo bar"
+[1, 2];
 "#;
 
         let mut lexer = Lexer::new(input);
@@ -377,7 +380,14 @@ if (5 < 10) {
             lexer.next_token(),
             Token::new(TokenKind::String("foo bar".into()), 201, 209)
         );
+        // [1, 2];
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::LBracket, 211, 211));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::Int("1".into()), 212, 212));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::Comma, 213, 213));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::Int("2".into()), 215, 215));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::RBracket, 216, 216));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::Semicolon, 217, 217));
         //
-        assert_eq!(lexer.next_token(), Token::new(TokenKind::Eof, 211, 211));
+        assert_eq!(lexer.next_token(), Token::new(TokenKind::Eof, 219, 219));
     }
 }

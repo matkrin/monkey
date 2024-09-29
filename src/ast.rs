@@ -121,6 +121,11 @@ pub enum Expression {
         arguments: Vec<Expression>,
     },
     StringLiteral(String),
+    ArrayLiteral(Vec<Expression>),
+    IndexExpression {
+        left: Box<Expression>,
+        index: Box<Expression>,
+    },
 }
 
 impl fmt::Display for Expression {
@@ -152,23 +157,22 @@ impl fmt::Display for Expression {
                 write!(f, "if{} {} {}", condition, consequence, alternative)
             }
             Expression::FunctionLiteral { parameters, body } => {
-                let mut params = Vec::new();
-                for param in parameters {
-                    params.push(param.to_string())
-                }
+                let params: Vec<_> = parameters.iter().map(|param| param.to_string()).collect();
                 write!(f, "({}){}", params.join(", "), body)
             }
             Expression::Call {
                 function,
                 arguments,
             } => {
-                let mut args = Vec::new();
-                for arg in arguments {
-                    args.push(arg.to_string())
-                }
+                let args: Vec<_> = arguments.iter().map(|arg| arg.to_string()).collect();
                 write!(f, "{}({})", function, args.join(", "))
             }
             Expression::StringLiteral(s) => write!(f, "{}", s),
+            Expression::ArrayLiteral(v) => {
+                let elements: Vec<_> = v.iter().map(|it| it.to_string()).collect();
+                write!(f, "[{}]", elements.join(", "))
+            }
+            Expression::IndexExpression { left, index } => write!(f, "({}[{}])", left, index),
         }
     }
 }

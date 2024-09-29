@@ -16,6 +16,7 @@ enum Precedence {
     Product,
     Prefix,
     Call,
+    Index
 }
 
 impl From<&Token> for Precedence {
@@ -30,6 +31,7 @@ impl From<&Token> for Precedence {
             TokenKind::Slash => Self::Product,
             TokenKind::Asterisk => Self::Product,
             TokenKind::LParen => Self::Call,
+            TokenKind::LBracket => Self::Index,
             _ => Self::Lowest,
         }
     }
@@ -174,6 +176,9 @@ impl<'a> Parser<'a> {
             TokenKind::Function => self.parse_function_literal()?,
             TokenKind::Minus | TokenKind::Bang => self.parse_prefix_expression()?,
             TokenKind::String(s) => Expression::StringLiteral(s.into()),
+            TokenKind::LBracket => {
+                Expression::ArrayLiteral(self.parse_expression_list(TokenKind::RBracket)?)
+            }
             _ => miette::bail!("Cannot parse expression yet"),
         };
 
@@ -195,6 +200,11 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::LParen => {
                     if let Ok(expr) = self.parse_call_expression(left_exp.clone()) {
+                        left_exp = expr;
+                    }
+                }
+                TokenKind::LBracket => {
+                    if let Ok(expr) = self.parse_index_expression(left_exp.clone()) {
                         left_exp = expr;
                     }
                 }
@@ -374,7 +384,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_call_expression(&mut self, function: Expression) -> Result<Expression> {
-        let arguments = self.parse_call_arguments()?;
+        let arguments = self.parse_expression_list(TokenKind::RParen)?;
         Ok(Expression::Call {
             function: Box::new(function),
             arguments,
@@ -407,6 +417,54 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         Ok(args)
+    }
+
+    fn parse_expression_list(&mut self, end: TokenKind) -> Result<Vec<Expression>> {
+        let mut list = Vec::new();
+
+        if self.peek_token.kind == end {
+            self.next_token();
+            return Ok(list);
+        }
+        self.next_token();
+
+        list.push(self.parse_expression(Precedence::Lowest)?);
+
+        while self.peek_token.kind == TokenKind::Comma {
+            self.next_token();
+            self.next_token();
+            list.push(self.parse_expression(Precedence::Lowest)?);
+        }
+
+        if self.peek_token.kind != end {
+            return Err(miette::miette!(
+                "Expected {}, got {}",
+                end,
+                self.peek_token.kind
+            ));
+        }
+
+        self.next_token();
+        Ok(list)
+    }
+
+    fn parse_index_expression(&mut self, left: Expression) -> Result<Expression> {
+        self.next_token();
+        let index = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token.kind != TokenKind::RBracket {
+            return Err(miette::miette!(
+                "Expected RBracket, got {}",
+                self.peek_token.kind
+            ));
+        }
+
+        self.next_token();
+
+        Ok(Expression::IndexExpression {
+            left: Box::new(left),
+            index: Box::new(index),
+        })
     }
 }
 
@@ -737,6 +795,15 @@ return 993322;
             program_from_input("add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))").to_string(),
             "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))"
         );
+        // Indexing
+        assert_eq!(
+            program_from_input("a * [1, 2, 3, 4][b * c] * d").to_string(),
+            "((a * ([1, 2, 3, 4][(b * c)])) * d)"
+        );
+        assert_eq!(
+            program_from_input("add(a * b[2], b[1], 2 * [1, 2][1])").to_string(),
+            "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))"
+        );
     }
 
     #[test]
@@ -896,5 +963,45 @@ return 993322;
             program[0],
             Statement::Expr(Expression::StringLiteral("hello world".into()))
         );
+    }
+
+    #[test]
+    fn test_parsing_array_literals() {
+        let program = program_from_input("[1, 2 * 2, 3 + 3]");
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::ArrayLiteral(vec![
+                Expression::IntegerLiteral(1),
+                Expression::Infix {
+                    token: Token::new(TokenKind::Asterisk, 6, 6),
+                    operator: "*".into(),
+                    left: Box::new(Expression::IntegerLiteral(2)),
+                    right: Box::new(Expression::IntegerLiteral(2)),
+                },
+                Expression::Infix {
+                    token: Token::new(TokenKind::Plus, 13, 13),
+                    operator: "+".into(),
+                    left: Box::new(Expression::IntegerLiteral(3)),
+                    right: Box::new(Expression::IntegerLiteral(3)),
+                },
+            ]))
+        )
+    }
+
+    #[test]
+    fn test_parsing_index_expressions() {
+        let program = program_from_input("myArray[1 + 1]");
+        assert_eq!(
+            program[0],
+            Statement::Expr(Expression::IndexExpression {
+                left: Box::new(Expression::Ident(Identifier::new("myArray".into()))),
+                index: Box::new(Expression::Infix {
+                    token: Token::new(TokenKind::Plus, 10, 10),
+                    operator: "+".into(),
+                    left: Box::new(Expression::IntegerLiteral(1)),
+                    right: Box::new(Expression::IntegerLiteral(1)),
+                })
+            })
+        )
     }
 }

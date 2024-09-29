@@ -1,7 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::{Expression, Node, Program, Statement}, builtins::BUILTINS, object::{Environment, Object}
+    ast::{Expression, Node, Program, Statement},
+    builtins::BUILTINS,
+    object::{Environment, Object},
 };
 
 use miette::{Result, Severity};
@@ -53,12 +55,10 @@ fn eval_expression(expression: &Expression, env: &Rc<RefCell<Environment>>) -> R
             let builtins = BUILTINS;
             match env.get(name) {
                 Some(val) => Ok(Rc::clone(&val)),
-                None => {
-                    match builtins.get(name) {
-                        Some(builtin) => Ok(Rc::clone(builtin)),
-                        None => Err(miette::miette!("identifier not found: {}", name)),
-                    }
-                }
+                None => match builtins.get(name) {
+                    Some(builtin) => Ok(Rc::clone(builtin)),
+                    None => Err(miette::miette!("identifier not found: {}", name)),
+                },
             }
         }
         Expression::Prefix {
@@ -110,6 +110,15 @@ fn eval_expression(expression: &Expression, env: &Rc<RefCell<Environment>>) -> R
             apply_function(func, args)
         }
         Expression::StringLiteral(s) => Ok(Rc::new(Object::String(s.into()))),
+        Expression::ArrayLiteral(v) => {
+            let elements = eval_expressions(v, env)?;
+            Ok(Rc::new(Object::Array(elements)))
+        }
+        Expression::IndexExpression { left, index } => {
+            let left = eval_expression(left, env)?;
+            let index = eval_expression(index, env)?;
+            eval_index_expression(left, index)
+        }
     }
 }
 
@@ -207,6 +216,26 @@ fn eval_expressions(
     Ok(result)
 }
 
+fn eval_index_expression(array: Rc<Object>, index: Rc<Object>) -> Result<Rc<Object>> {
+    let idx = match index.as_ref() {
+        Object::Integer(i) => *i,
+        _ => return Err(miette::miette!("Indexing only with integers")),
+    };
+
+    match array.as_ref() {
+        Object::Array(v) => {
+            let max = (v.len() - 1) as isize;
+
+            if idx < 0 || idx > max {
+                return Ok(Rc::new(Object::Null));
+            }
+
+            Ok(Rc::clone(&v[idx as usize]))
+        }
+        _ => Err(miette::miette!("Indexing only for arrays")),
+    }
+}
+
 fn apply_function(func: Rc<Object>, args: Vec<Rc<Object>>) -> Result<Rc<Object>> {
     match func.as_ref() {
         Object::Function {
@@ -227,7 +256,7 @@ fn apply_function(func: Rc<Object>, args: Vec<Rc<Object>>) -> Result<Rc<Object>>
                 Object::ReturnValue(rc) => Ok(Rc::clone(rc)),
                 _ => Ok(evaluated),
             }
-        },
+        }
         Object::Builtin(func) => func(args),
         _ => Err(miette::miette!("not a function: {}", func.r#type())),
     }
@@ -584,18 +613,83 @@ addTwo(2);
 
     #[test]
     fn test_builtin_functions() {
-        assert_eq!(test_eval(r#"len("")"#).unwrap(), Rc::new(Object::Integer(0)));
-        assert_eq!(test_eval(r#"len("four")"#).unwrap(), Rc::new(Object::Integer(4)));
-        assert_eq!(test_eval(r#"len("hello world")"#).unwrap(), Rc::new(Object::Integer(11)));
+        assert_eq!(
+            test_eval(r#"len("")"#).unwrap(),
+            Rc::new(Object::Integer(0))
+        );
+        assert_eq!(
+            test_eval(r#"len("four")"#).unwrap(),
+            Rc::new(Object::Integer(4))
+        );
+        assert_eq!(
+            test_eval(r#"len("hello world")"#).unwrap(),
+            Rc::new(Object::Integer(11))
+        );
 
         match test_eval(r#"len(1)"#) {
             Ok(_) => unreachable!(),
-            Err(e) => assert_eq!(e.to_string(), "argument to `len` not supported, got 1".to_string())
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "argument to `len` not supported, got 1".to_string()
+            ),
         };
 
         match test_eval(r#"len("one", "two")"#) {
             Ok(_) => unreachable!(),
-            Err(e) => assert_eq!(e.to_string(), "wrong number of arguments. got=2, want = 1".to_string())
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "wrong number of arguments. got=2, want = 1".to_string()
+            ),
         };
+    }
+
+    #[test]
+    fn test_array_literals() {
+        assert_eq!(
+            test_eval("[1, 2 * 2, 3 + 3]").unwrap(),
+            Rc::new(Object::Array(vec![
+                Rc::new(Object::Integer(1)),
+                Rc::new(Object::Integer(4)),
+                Rc::new(Object::Integer(6)),
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_array_index_expressions() {
+        assert_eq!(
+            test_eval("[1, 2, 3][0]").unwrap(),
+            Rc::new(Object::Integer(1))
+        );
+        assert_eq!(
+            test_eval("[1, 2, 3][1]").unwrap(),
+            Rc::new(Object::Integer(2))
+        );
+        assert_eq!(
+            test_eval("[1, 2, 3][2]").unwrap(),
+            Rc::new(Object::Integer(3))
+        );
+        assert_eq!(
+            test_eval("let i = 0; [1][i];").unwrap(),
+            Rc::new(Object::Integer(1))
+        );
+        assert_eq!(
+            test_eval("[1, 2, 3][1 + 1]").unwrap(),
+            Rc::new(Object::Integer(3))
+        );
+        assert_eq!(
+            test_eval("let myArray = [1, 2, 3]; myArray[2];").unwrap(),
+            Rc::new(Object::Integer(3))
+        );
+        assert_eq!(
+            test_eval("let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];").unwrap(),
+            Rc::new(Object::Integer(6))
+        );
+        assert_eq!(
+            test_eval("let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i];").unwrap(),
+            Rc::new(Object::Integer(2))
+        );
+        assert_eq!(test_eval("[1, 2, 3][3]").unwrap(), Rc::new(Object::Null));
+        assert_eq!(test_eval("[1, 2, 3][-1]").unwrap(), Rc::new(Object::Null));
     }
 }

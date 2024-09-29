@@ -16,7 +16,8 @@ pub enum Object {
         env: Rc<RefCell<Environment>>,
     },
     String(String),
-    Builtin(fn(Vec<Rc<Object>>) -> Result<Rc<Object>>)
+    Builtin(fn(Vec<Rc<Object>>) -> Result<Rc<Object>>),
+    Array(Vec<Rc<Object>>),
 }
 
 impl fmt::Display for Object {
@@ -31,14 +32,15 @@ impl fmt::Display for Object {
                 body,
                 env: _,
             } => {
-                let mut params = Vec::new();
-                for param in parameters {
-                    params.push(param.to_string());
-                }
+                let params: Vec<_> = parameters.iter().map(|param| param.to_string()).collect();
                 write!(f, "fn({}){{\n{}\n}}", params.join(", "), body)
             }
             Object::String(s) => write!(f, "{}", s),
             Object::Builtin(_) => write!(f, "builtin function"),
+            Object::Array(v) => {
+                let elements: Vec<_> = v.iter().map(|it| it.to_string()).collect();
+                write!(f, "[{}]", elements.join(", "))
+            },
         }
     }
 }
@@ -57,6 +59,7 @@ impl Object {
             } => "FUNCTION".into(),
             Object::String(_) => "STRING".into(),
             Object::Builtin(_) => "BUITLIN".into(),
+            Object::Array(_) => "Array".into(),
         }
     }
 }
