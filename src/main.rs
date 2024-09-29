@@ -10,6 +10,7 @@ use object::Environment;
 use parser::Parser;
 
 mod ast;
+mod builtins;
 mod evaluator;
 mod lexer;
 mod object;

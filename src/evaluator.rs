@@ -1,8 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::{Expression, Node, Program, Statement},
-    object::{Environment, Object},
+    ast::{Expression, Node, Program, Statement}, builtins::BUILTINS, object::{Environment, Object}
 };
 
 use miette::{Result, Severity};
@@ -51,9 +50,15 @@ fn eval_expression(expression: &Expression, env: &Rc<RefCell<Environment>>) -> R
         Expression::Ident(identifier) => {
             let name = identifier.value();
             let env = env.as_ref().borrow();
+            let builtins = BUILTINS;
             match env.get(name) {
                 Some(val) => Ok(Rc::clone(&val)),
-                None => Err(miette::miette!("identifier not found: {}", name,)),
+                None => {
+                    match builtins.get(name) {
+                        Some(builtin) => Ok(Rc::clone(builtin)),
+                        None => Err(miette::miette!("identifier not found: {}", name)),
+                    }
+                }
             }
         }
         Expression::Prefix {
@@ -222,7 +227,8 @@ fn apply_function(func: Rc<Object>, args: Vec<Rc<Object>>) -> Result<Rc<Object>>
                 Object::ReturnValue(rc) => Ok(Rc::clone(rc)),
                 _ => Ok(evaluated),
             }
-        }
+        },
+        Object::Builtin(func) => func(args),
         _ => Err(miette::miette!("not a function: {}", func.r#type())),
     }
 }
@@ -574,5 +580,22 @@ addTwo(2);
             test_eval(input).unwrap(),
             Rc::new(Object::String("Hello World!".into()))
         );
+    }
+
+    #[test]
+    fn test_builtin_functions() {
+        assert_eq!(test_eval(r#"len("")"#).unwrap(), Rc::new(Object::Integer(0)));
+        assert_eq!(test_eval(r#"len("four")"#).unwrap(), Rc::new(Object::Integer(4)));
+        assert_eq!(test_eval(r#"len("hello world")"#).unwrap(), Rc::new(Object::Integer(11)));
+
+        match test_eval(r#"len(1)"#) {
+            Ok(_) => unreachable!(),
+            Err(e) => assert_eq!(e.to_string(), "argument to `len` not supported, got 1".to_string())
+        };
+
+        match test_eval(r#"len("one", "two")"#) {
+            Ok(_) => unreachable!(),
+            Err(e) => assert_eq!(e.to_string(), "wrong number of arguments. got=2, want = 1".to_string())
+        };
     }
 }

@@ -1,5 +1,6 @@
 use core::fmt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use miette::Result;
 
 use crate::ast::{BlockStatement, Identifier};
 
@@ -15,6 +16,7 @@ pub enum Object {
         env: Rc<RefCell<Environment>>,
     },
     String(String),
+    Builtin(fn(Vec<Rc<Object>>) -> Result<Rc<Object>>)
 }
 
 impl fmt::Display for Object {
@@ -36,6 +38,7 @@ impl fmt::Display for Object {
                 write!(f, "fn({}){{\n{}\n}}", params.join(", "), body)
             }
             Object::String(s) => write!(f, "{}", s),
+            Object::Builtin(_) => write!(f, "builtin function"),
         }
     }
 }
@@ -53,6 +56,7 @@ impl Object {
                 env: _,
             } => "FUNCTION".into(),
             Object::String(_) => "STRING".into(),
+            Object::Builtin(_) => "BUITLIN".into(),
         }
     }
 }
