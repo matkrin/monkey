@@ -3,19 +3,11 @@ use std::io::{self, BufRead, BufReader};
 use std::io::{Read, Write};
 use std::rc::Rc;
 
-use ast::Node;
-use evaluator::eval;
-use lexer::Lexer;
-use object::Environment;
-use parser::Parser;
-
-mod ast;
-mod builtins;
-mod evaluator;
-mod lexer;
-mod object;
-mod parser;
-mod token;
+use monkey::Node;
+use monkey::eval;
+use monkey::Lexer;
+use monkey::Environment;
+use monkey::Parser;
 
 const PROMPT: &str = "monkey❯";
 

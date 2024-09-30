@@ -1,5 +1,4 @@
-use fmt::Write;
-use std::{collections::HashMap, fmt, ops};
+use std::{fmt, ops};
 
 use crate::token::Token;
 

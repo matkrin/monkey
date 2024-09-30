@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     ast::{BlockStatement, Expression, Identifier, Program, Statement},
     lexer::Lexer,
@@ -392,33 +390,34 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>> {
-        let mut args = Vec::new();
-        if self.peek_token.kind == TokenKind::RParen {
-            self.next_token();
-            return Ok(args);
-        }
-        self.next_token();
-
-        if let Ok(expr) = self.parse_expression(Precedence::Lowest) {
-            args.push(expr)
-        }
-
-        while self.peek_token.kind == TokenKind::Comma {
-            self.next_token();
-            self.next_token();
-            if let Ok(expr) = self.parse_expression(Precedence::Lowest) {
-                args.push(expr)
-            }
-        }
-
-        if self.peek_token.kind != TokenKind::RParen {
-            miette::bail!("Expected RParen");
-        }
-        self.next_token();
-
-        Ok(args)
-    }
+    // This was replaced but I leave it in for completeness
+    //fn parse_call_arguments(&mut self) -> Result<Vec<Expression>> {
+    //    let mut args = Vec::new();
+    //    if self.peek_token.kind == TokenKind::RParen {
+    //        self.next_token();
+    //        return Ok(args);
+    //    }
+    //    self.next_token();
+    //
+    //    if let Ok(expr) = self.parse_expression(Precedence::Lowest) {
+    //        args.push(expr)
+    //    }
+    //
+    //    while self.peek_token.kind == TokenKind::Comma {
+    //        self.next_token();
+    //        self.next_token();
+    //        if let Ok(expr) = self.parse_expression(Precedence::Lowest) {
+    //            args.push(expr)
+    //        }
+    //    }
+    //
+    //    if self.peek_token.kind != TokenKind::RParen {
+    //        miette::bail!("Expected RParen");
+    //    }
+    //    self.next_token();
+    //
+    //    Ok(args)
+    //}
 
     fn parse_expression_list(&mut self, end: TokenKind) -> Result<Vec<Expression>> {
         let mut list = Vec::new();
