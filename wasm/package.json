@@ -1,0 +1,19 @@
+{
+  "name": "wasm",
+  "version": "0.1.0",
+  "description": "monkey in the browser",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "no"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0"
+  }
+}
