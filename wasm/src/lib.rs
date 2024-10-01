@@ -93,11 +93,15 @@ pub fn main() -> Result<(), JsValue> {
                 KeyCode::Enter => {
                     let lexer = Lexer::new(line_editor.buffer());
                     let mut parser = Parser::new(lexer);
-                    let program = parser.parse_program();
+                    let (program, errors) = parser.parse_program();
+
+                    for error in errors {
+                        line_editor.write_line(&format!("{}", error));
+                    }
 
                     match monkey::eval(Node::Program(program), &environment) {
                         Ok(evaluated) => line_editor.enter(&format!("{}", evaluated)),
-                        Err(e) => line_editor.enter(&format!("{:?}", e)),
+                        Err(e) => line_editor.enter(&format!("{}", e)),
                     };
                 }
                 KeyCode::Backspace => {

@@ -75,21 +75,21 @@ impl<'a> Parser<'a> {
     //    }
     //}
 
-    pub fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self) -> (Program, Vec<miette::Report>) {
         let mut program = Program::new();
+        let mut errors = Vec::new();
 
         while self.current_token.kind != TokenKind::Eof {
             match self.parse_statement() {
                 Ok(stmt) => program.push(stmt),
                 Err(e) => {
-                    println!("{:?}", e);
-                    break;
+                    errors.push(e);
                 }
             }
             self.next_token();
         }
 
-        program
+        (program, errors)
     }
 
     fn parse_statement(&mut self) -> Result<Statement> {

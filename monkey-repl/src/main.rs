@@ -33,7 +33,11 @@ fn start_repl(stdin: impl Read, mut stdout: impl Write) {
 
         let lexer = Lexer::new(&input);
         let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
+        let (program, errors) = parser.parse_program();
+
+        for error in errors {
+            writeln!(stdout, "{:?}", error).expect("Failed writing to stdout");
+        }
 
         match eval(Node::Program(program), &environment) {
             Ok(evaluated) => writeln!(stdout, "{}", evaluated).expect("Failed writing to stdout"),

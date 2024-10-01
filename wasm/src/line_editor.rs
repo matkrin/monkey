@@ -214,6 +214,13 @@ impl LineEditor {
         self.prompt();
     }
 
+    pub fn write_line(&mut self, msg: &str) {
+        self.csi_new_line();
+        self.term.write(msg);
+        self.flush();
+        self.csi_new_line();
+    }
+
     pub fn clear_screen(&self) {
         self.term.clear();
     }
